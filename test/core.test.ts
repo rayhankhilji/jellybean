@@ -202,6 +202,33 @@ test('identifiers split on case and separators', () => {
   assert.deepEqual(splitIdentifier('simple'), ['simple']);
 });
 
+test('the fast sub-word split agrees with the readable one', () => {
+  // countCodeTerms hand-rolls character scanning for speed. It must produce
+  // exactly what splitIdentifier produces, or search silently changes meaning.
+  const identifiers = [
+    'parseHTTPResponse', 'user_id_map', 'getURL', 'simple', 'XMLHttpRequest', 'a', 'AB', 'aB',
+    'snake_case_name', '_leading', 'trailing_', '__dunder__', 'mixed_Case_Name', 'v2Migration',
+    'HTTP2Server', 'toJSON', 'IOError', 'x1y2z3', '$dollar', 'a$b', 'ALLCAPS', 'camelCase',
+  ];
+
+  for (const identifier of identifiers) {
+    const expected = new Set(splitIdentifier(identifier));
+    expected.add(identifier.toLowerCase());
+
+    const actual = new Set(tokenizeCode(identifier));
+    assert.deepEqual(
+      [...actual].sort(),
+      [...expected].sort(),
+      `disagreement on ${identifier}`,
+    );
+  }
+});
+
+test('numeric literals are not indexed as terms', () => {
+  assert.deepEqual(tokenizeCode('const x = 12345;').includes('12345'), false);
+  assert.ok(tokenizeCode('const x = 12345;').includes('const'));
+});
+
 test('code tokenizing emits whole identifiers and their parts', () => {
   const tokens = tokenizeCode('const getUserName = 1;');
   assert.ok(tokens.includes('getusername'));

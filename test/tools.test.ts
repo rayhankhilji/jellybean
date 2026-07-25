@@ -570,3 +570,62 @@ test('every tool stays within a tight budget', async () => {
     }
   });
 });
+
+test('a restart reuses the parse cache instead of re-parsing', async () => {
+  await withWorkspace(async (ctx) => {
+    // A second index over the same workspace must hydrate from the cache the
+    // first one wrote. Without this, every server start re-parses the repo.
+    const second = new CodeIndex(ctx.workspace, ctx.config);
+    await second.ensureFresh(true);
+
+    assert.equal(second.fileCount, ctx.index.fileCount);
+    assert.ok(second.cacheHits > 0, 'nothing was restored from cache');
+
+    // Hydrated records must be complete, not just present.
+    const store = second.get('src/store.ts');
+    assert.ok(store, 'store.ts missing after cache load');
+    assert.ok(
+      store.symbols.some((s) => s.name === 'createStore'),
+      'symbols were lost on the cache path',
+    );
+    assert.ok(store.imports.length >= 0);
+    assert.ok(store.termCount > 0, 'search terms were lost on the cache path');
+  });
+});
+
+test('the cache does not serve a stale parse after an edit', async () => {
+  await withWorkspace(async (ctx) => {
+    await writeFile(join(ctx.workspace.root, 'src/store.ts'), 'export function afterEdit(): void {}\n', 'utf8');
+
+    const second = new CodeIndex(ctx.workspace, ctx.config);
+    await second.ensureFresh(true);
+
+    const store = second.get('src/store.ts');
+    assert.ok(store);
+    assert.ok(
+      store.symbols.some((s) => s.name === 'afterEdit'),
+      'the edited file was served from a stale cache entry',
+    );
+    assert.equal(
+      store.symbols.some((s) => s.name === 'createStore'),
+      false,
+      'the pre-edit symbols survived',
+    );
+  });
+});
+
+test('the symbol name index tracks renames', async () => {
+  await withWorkspace(async (ctx) => {
+    assert.equal(ctx.index.filesDeclaring('createStore').length, 1);
+
+    await writeFile(join(ctx.workspace.root, 'src/store.ts'), 'export function renamedStore(): void {}\n', 'utf8');
+    await ctx.index.ensureFresh(true);
+
+    assert.equal(ctx.index.filesDeclaring('renamedStore').length, 1);
+    assert.equal(
+      ctx.index.filesDeclaring('createStore').length,
+      0,
+      'the old name still resolves after a rename',
+    );
+  });
+});

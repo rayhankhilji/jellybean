@@ -38,15 +38,21 @@ interface OpenContainer {
   declaration: string;
 }
 
-/** Extract the symbol outline of a source file. */
-export function extractSymbols(source: string, language: LanguageId): CodeSymbol[] {
+/**
+ * Extract the symbol outline of a source file.
+ *
+ * `masked` may be supplied by a caller that has already masked this source —
+ * masking is the single most expensive step in indexing, and doing it once for
+ * both symbols and imports rather than twice halves it.
+ */
+export function extractSymbols(source: string, language: LanguageId, masked?: string): CodeSymbol[] {
   const patterns = patternsFor(language);
 
   if (language === 'markdown') return extractMarkdown(source);
   if (language === 'yaml' || language === 'toml') return extractConfigKeys(source, language);
   if (patterns.length === 0) return [];
 
-  const masked = maskSource(source, syntaxFor(language));
+  masked ??= maskSource(source, syntaxFor(language));
   if (BRACE_LANGUAGES.has(language)) return extractBraced(source, masked, language);
   if (INDENT_LANGUAGES.has(language)) return extractIndented(source, masked, language);
   return extractFlat(source, masked, language);

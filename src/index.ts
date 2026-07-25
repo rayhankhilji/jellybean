@@ -68,14 +68,21 @@ async function main(): Promise<void> {
   // Warm the index before accepting traffic, so the first tool call is fast
   // rather than paying for a full scan while the client waits.
   await context.index.ensureFresh(true);
+
+  // Watch after the first scan, so tool calls do not re-walk the tree. Without
+  // this every call that lands outside the freshness window pays for a full
+  // walk — seconds, on a repository of any size.
+  const watching = context.index.startWatching();
   process.stderr.write(
-    `${SERVER_NAME} ${SERVER_VERSION} — indexed ${context.index.fileCount} files in ${config.root}\n`,
+    `${SERVER_NAME} ${SERVER_VERSION} — indexed ${context.index.fileCount} files in ${config.root}` +
+      `${watching ? '' : ' (filesystem watching unavailable; falling back to periodic rescans)'}\n`,
   );
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
   const shutdown = (): void => {
+    context.index.stopWatching();
     void server.close().finally(() => process.exit(0));
   };
   process.on('SIGINT', shutdown);

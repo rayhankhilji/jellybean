@@ -25,17 +25,107 @@ export function splitIdentifier(identifier: string): string[] {
  */
 export function tokenizeCode(text: string): string[] {
   const out: string[] = [];
-  const identifiers = text.match(/[A-Za-z_$][A-Za-z0-9_$]*/g);
-  if (!identifiers) return out;
-
-  for (const id of identifiers) {
-    if (id.length > 64) continue; // minified blob or base64 payload; not useful
-    const lower = id.toLowerCase();
-    out.push(lower);
-    const parts = splitIdentifier(id);
-    if (parts.length > 1) out.push(...parts);
-  }
+  countCodeTerms(text, (term) => {
+    out.push(term);
+  });
   return out;
+}
+
+/**
+ * Stream the search terms of `text` to a callback.
+ *
+ * The array-returning form above is convenient but allocates one string per
+ * identifier *per sub-word* — on a large repository that is tens of millions of
+ * short-lived strings, and it dominated indexing time. Indexing uses this
+ * instead and increments a frequency map directly.
+ *
+ * Character scanning rather than `String.match` for the same reason: `match`
+ * with a global regex materialises every identifier in the file at once.
+ */
+export function countCodeTerms(text: string, emit: (term: string) => void): void {
+  const length = text.length;
+  let start = -1;
+
+  for (let i = 0; i <= length; i++) {
+    const code = i < length ? text.charCodeAt(i) : 0;
+    const isWord =
+      (code >= 97 && code <= 122) || // a-z
+      (code >= 65 && code <= 90) || // A-Z
+      (code >= 48 && code <= 57) || // 0-9
+      code === 95 || // _
+      code === 36; // $
+
+    if (isWord) {
+      if (start === -1) start = i;
+      continue;
+    }
+    if (start === -1) continue;
+
+    // An identifier cannot begin with a digit; if it does, this is a numeric
+    // literal and not worth indexing.
+    const first = text.charCodeAt(start);
+    const numeric = first >= 48 && first <= 57;
+    const size = i - start;
+
+    // Skip minified blobs and base64 payloads — never useful as search terms.
+    if (!numeric && size <= 64) {
+      const identifier = text.slice(start, i);
+      emit(identifier.toLowerCase());
+      emitSubWords(identifier, emit);
+    }
+    start = -1;
+  }
+}
+
+/**
+ * Emit the sub-words of an identifier, splitting on case changes and
+ * separators, without the two regex replacements the readable version uses.
+ */
+function emitSubWords(identifier: string, emit: (term: string) => void): void {
+  const length = identifier.length;
+
+  // -1 means "not currently inside a sub-word", which is the state after a
+  // separator. Tracking it explicitly is what keeps `__dunder__` from emitting
+  // the underscores as parts of their own.
+  let start = -1;
+
+  const flush = (end: number): void => {
+    if (start === -1 || end <= start) return;
+    // A part spanning the whole identifier is the identifier, already emitted.
+    if (start === 0 && end === length) return;
+    emit(identifier.slice(start, end).toLowerCase());
+  };
+
+  for (let i = 0; i < length; i++) {
+    const current = identifier.charCodeAt(i);
+
+    if (current === 95 || current === 36) {
+      // `_` or `$`
+      flush(i);
+      start = -1;
+      continue;
+    }
+    if (start === -1) {
+      start = i;
+      continue;
+    }
+
+    const previous = identifier.charCodeAt(i - 1);
+    const lowerToUpper = previous >= 97 && previous <= 122 && current >= 65 && current <= 90;
+    const digitToUpper = previous >= 48 && previous <= 57 && current >= 65 && current <= 90;
+    if (lowerToUpper || digitToUpper) {
+      flush(i);
+      start = i;
+      continue;
+    }
+
+    // `HTTPResponse` splits before the `R`, not after the `P`.
+    if (previous >= 65 && previous <= 90 && current >= 97 && current <= 122 && i - 1 > start) {
+      flush(i - 1);
+      start = i - 1;
+    }
+  }
+  flush(length);
 }
 
 /** Collapse runs of whitespace into single spaces and trim. */

@@ -305,23 +305,28 @@ function renderSymbolSearch(
   }
   const hits: SymbolHit[] = [];
 
-  for (const file of ctx.index.all()) {
-    if (!accepts(file)) continue;
-    for (const symbol of file.symbols) {
-      const name = symbol.name.toLowerCase();
-      let score = 0;
-      if (name === needle) score = 100;
-      else if (name.startsWith(needle)) score = 60;
-      else if (name.includes(needle)) score = 40;
-      else {
-        const parts = splitIdentifier(symbol.name);
-        const overlap = terms.filter((t) => parts.includes(t)).length;
-        if (overlap === 0) continue;
-        score = 10 * overlap;
+  // Score each *distinct name* once, then expand only the names that matched.
+  // Walking every symbol of every file instead took seconds on a large
+  // repository, and most of that work was re-scoring the same names.
+  for (const [name, fileIndices] of ctx.index.allSymbolNames()) {
+    let score = 0;
+    if (name === needle) score = 100;
+    else if (name.startsWith(needle)) score = 60;
+    else if (name.includes(needle)) score = 40;
+    else {
+      const parts = splitIdentifier(name);
+      const overlap = terms.filter((t) => parts.includes(t)).length;
+      if (overlap === 0) continue;
+      score = 10 * overlap;
+    }
+
+    for (const fileIndex of fileIndices) {
+      const file = ctx.index.at(fileIndex);
+      if (!file || !accepts(file)) continue;
+      for (const symbol of file.symbols) {
+        if (symbol.name.toLowerCase() !== name) continue;
+        hits.push({ file, symbol, score: score + (symbol.exported ? 5 : 0) + (symbol.depth === 0 ? 3 : 0) });
       }
-      if (symbol.exported) score += 5;
-      if (symbol.depth === 0) score += 3;
-      hits.push({ file, symbol, score });
     }
   }
 

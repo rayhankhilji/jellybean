@@ -15,9 +15,9 @@ import type { ImportRef, LanguageId } from './types.js';
 /** Import statements past this point are almost certainly generated noise. */
 const MAX_IMPORTS = 400;
 
-export function extractImports(source: string, language: LanguageId): ImportRef[] {
+export function extractImports(source: string, language: LanguageId, masked?: string): ImportRef[] {
   const lines = toLines(source);
-  const mlines = toLines(maskSource(source, syntaxFor(language)));
+  const mlines = toLines(masked ?? maskSource(source, syntaxFor(language)));
   const refs: ImportRef[] = [];
 
   /** Go groups imports in a parenthesised block; track whether we are inside one. */

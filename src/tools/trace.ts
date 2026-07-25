@@ -104,9 +104,10 @@ function locate(args: TraceArgs, ctx: ToolContext): Target | { error: string } {
 
   if (!args.symbol) return { error: 'provide a path, a symbol, or both.' };
 
-  // Symbol alone: unambiguous only if exactly one file declares it.
+  // Symbol alone: unambiguous only if exactly one file declares it. Answered
+  // from the symbol-name index rather than by scanning every file.
   const declaring = ctx.index
-    .all()
+    .filesDeclaring(args.symbol)
     .map((file) => ({ file, symbol: file.symbols.find((s) => s.name === args.symbol) }))
     .filter((entry): entry is Target => entry.symbol !== undefined);
 
