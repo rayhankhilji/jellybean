@@ -8,7 +8,6 @@ Repository maps, symbol outlines, ranked search, import tracing, and parsed
 diagnostics — every result under a token budget it actually honours.
 
 [![CI](https://github.com/rayhankhilji/jellybean/actions/workflows/ci.yml/badge.svg)](https://github.com/rayhankhilji/jellybean/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/jellybean-mcp.svg)](https://www.npmjs.com/package/jellybean-mcp)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.17-3c873a.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-1.29-6b4fbb.svg)](https://modelcontextprotocol.io)
@@ -98,7 +97,7 @@ two runtime dependencies (the MCP SDK and Zod).
 ### Claude Code
 
 ```bash
-claude mcp add jellybean -- npx -y jellybean-mcp /absolute/path/to/your/repo
+claude mcp add jellybean -- npx -y github:rayhankhilji/jellybean /absolute/path/to/your/repo
 ```
 
 ### Claude Desktop, Cursor, Windsurf, Zed
@@ -110,7 +109,7 @@ Add to your MCP configuration file:
   "mcpServers": {
     "jellybean": {
       "command": "npx",
-      "args": ["-y", "jellybean-mcp", "/absolute/path/to/your/repo"]
+      "args": ["-y", "github:rayhankhilji/jellybean", "/absolute/path/to/your/repo"]
     }
   }
 }
@@ -124,6 +123,9 @@ cd jellybean
 npm install && npm run build
 node dist/index.js /path/to/your/repo
 ```
+
+Not yet on the npm registry, so the commands above install straight from this
+repository — `npx` runs the build itself via the `prepare` script.
 
 ## The seven tools
 
