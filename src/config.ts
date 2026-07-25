@@ -29,15 +29,27 @@ export interface JellyBeanConfig {
   notesPath: string;
 }
 
+/**
+ * Hard ceiling on a single tool result.
+ *
+ * Exported so the tool schemas advertise the same limit the server enforces —
+ * a schema promising more than the server delivers means an agent asks for
+ * 40,000 tokens, silently receives 25,000, and cannot tell why.
+ */
+export const MAX_TOKEN_BUDGET = 25_000;
+
+/** Default seconds before a `jb_diagnose` run is killed. */
+const DEFAULT_COMMAND_TIMEOUT_SECONDS = 120;
+
 const DEFAULTS: Omit<JellyBeanConfig, 'root'> = {
   maxFileBytes: 512 * 1024,
   maxFiles: 20_000,
   defaultTokenBudget: 2_000,
-  maxTokenBudget: 25_000,
+  maxTokenBudget: MAX_TOKEN_BUDGET,
   ignore: [],
   allowedCommands: [],
   allowArbitraryCommands: false,
-  commandTimeoutMs: 120_000,
+  commandTimeoutMs: DEFAULT_COMMAND_TIMEOUT_SECONDS * 1000,
   notesPath: '.jellybean/notes.json',
 };
 
@@ -104,7 +116,9 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = proc
         config.allowArbitraryCommands = true;
         break;
       case '--command-timeout':
-        config.commandTimeoutMs = intFrom(next(), DEFAULTS.commandTimeoutMs) * 1000;
+        // The flag is in seconds; the fallback must be too, or a malformed value
+        // yields DEFAULT_MS × 1000 — a thirty-three hour timeout.
+        config.commandTimeoutMs = intFrom(next(), DEFAULT_COMMAND_TIMEOUT_SECONDS) * 1000;
         break;
       default:
         if (arg.startsWith('-')) throw new Error(`Unknown option: ${arg}`);

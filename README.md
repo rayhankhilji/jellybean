@@ -127,6 +127,30 @@ node dist/index.js /path/to/your/repo
 Not yet on the npm registry, so the commands above install straight from this
 repository — `npx` runs the build itself via the `prepare` script.
 
+## See it before you install it
+
+An MCP server is awkward to evaluate: normally the only way to find out what it
+does is to wire it into an agent and hope the agent chooses to call it. So there
+is a guided tour that drives every tool against a real repository and prints
+exactly what a model would receive:
+
+```bash
+git clone https://github.com/rayhankhilji/jellybean.git
+cd jellybean && npm install
+npm run demo
+```
+
+Point it at your own code, and optionally run one of your project's checks for
+real:
+
+```bash
+node scripts/demo.mjs /path/to/your/repo
+node scripts/demo.mjs /path/to/your/repo --check test
+```
+
+The tour ends by comparing what it printed against the cost of reading the
+repository in full.
+
 ## The seven tools
 
 ### `jb_map` — orient yourself
@@ -443,8 +467,9 @@ storing line-level postings would be far larger for no ranking benefit.
 ```bash
 npm install
 npm run build       # compile to dist/
-npm test            # 110 tests
+npm test            # 116 tests
 npm run typecheck   # no emit
+npm run demo        # guided tour of every tool
 ```
 
 The suite covers the masking scanner (template nesting, regex-versus-division,

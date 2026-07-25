@@ -1,7 +1,7 @@
 /** Shared plumbing for tool handlers. */
 
 import { z } from 'zod';
-import type { JellyBeanConfig } from '../config.js';
+import { MAX_TOKEN_BUDGET, type JellyBeanConfig } from '../config.js';
 import type { CodeIndex } from '../core/code-index.js';
 import type { HandleStore } from '../core/handles.js';
 import type { NotesStore } from '../core/notes.js';
@@ -20,9 +20,11 @@ export const tokenBudgetArg = z
   .number()
   .int()
   .min(100)
-  .max(50_000)
+  .max(MAX_TOKEN_BUDGET)
   .optional()
-  .describe('Maximum tokens the result may occupy. The tool degrades detail to fit rather than truncating mid-row.');
+  .describe(
+    `Maximum tokens the result may occupy (default 2000, ceiling ${MAX_TOKEN_BUDGET}). The tool degrades detail to fit rather than truncating mid-row.`,
+  );
 
 /** Clamp a requested budget to what this server is configured to allow. */
 export function resolveBudget(ctx: ToolContext, requested: number | undefined): number {

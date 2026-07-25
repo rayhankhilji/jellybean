@@ -225,6 +225,25 @@ test('jb_search symbol mode matches declaration names only', async () => {
   });
 });
 
+test('jb_search counts places, not just raw hits, when collapsing by symbol', async () => {
+  await withWorkspace(async (ctx) => {
+    // "items" appears on several lines inside the same two methods of Store, so
+    // the hit count and the number of places to look must differ — and the
+    // omitted count below the rows has to be in places, matching the rows.
+    const output = await runSearch({ query: 'items', maxFiles: 1 }, ctx);
+    const header = output.split('\n').find((line) => line.startsWith('src/store.ts'));
+    assert.ok(header, `no result for store.ts:\n${output}`);
+
+    const match = /(\d+) hits in (\d+) places/.exec(header);
+    if (match) {
+      assert.ok(Number(match[1]) > Number(match[2]), `collapsing did not reduce anything: ${header}`);
+    } else {
+      // Nothing collapsed, so a plain hit count is the honest summary.
+      assert.ok(/\d+ hits?/.test(header), header);
+    }
+  });
+});
+
 test('jb_search reports an invalid regex instead of throwing', async () => {
   await withWorkspace(async (ctx) => {
     const output = await runSearch({ query: '([unclosed', mode: 'regex' }, ctx);

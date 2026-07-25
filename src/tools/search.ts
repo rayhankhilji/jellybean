@@ -126,8 +126,17 @@ export async function runSearch(args: SearchArgs, ctx: ToolContext): Promise<str
     // Collapse hits that share an enclosing symbol: six matches inside one
     // function are one place to look, and repeating its handle six times is
     // pure waste. The best-scoring line stands in for the rest.
-    const shown = dedupeBySymbol(hits).slice(0, MAX_HITS_PER_FILE);
-    if (!writer.push(fields(file.path, plural(hits.length, 'hit'), file.language))) break;
+    const places = dedupeBySymbol(hits);
+    const shown = places.slice(0, MAX_HITS_PER_FILE);
+
+    // Report both counts. After collapsing, "23 hits" alone would overstate how
+    // much there is to look at, and the omitted count has to be in the same
+    // unit as the rows beneath it or it reads as a lie.
+    const summary =
+      places.length === hits.length
+        ? plural(hits.length, 'hit')
+        : `${plural(hits.length, 'hit')} in ${plural(places.length, 'place')}`;
+    if (!writer.push(fields(file.path, summary, file.language))) break;
 
     let exhausted = false;
     for (const hit of shown) {
@@ -137,8 +146,8 @@ export async function runSearch(args: SearchArgs, ctx: ToolContext): Promise<str
       }
     }
     if (exhausted) break;
-    if (hits.length > shown.length) {
-      writer.push(indent(1, `… ${hits.length - shown.length} more in this file`));
+    if (places.length > shown.length) {
+      writer.push(indent(1, `… ${places.length - shown.length} more in this file`));
     }
   }
 

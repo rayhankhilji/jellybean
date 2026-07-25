@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { MAX_TOKEN_BUDGET, parseArgs } from '../src/config.js';
 import { BudgetWriter, clampTokens, estimateTokens } from '../src/core/tokens.js';
 import { IgnoreMatcher, compileRule } from '../src/core/ignore.js';
 import { HandleStore, handleId, isHandle } from '../src/core/handles.js';
@@ -59,6 +60,34 @@ test('clampTokens shortens to fit and marks the cut', () => {
   assert.ok(clamped.endsWith('…'));
   assert.equal(clampTokens('short', 100), 'short');
   assert.equal(clampTokens('anything', 0), '');
+});
+
+// --- configuration ----------------------------------------------------------
+
+test('--command-timeout is read as seconds, and a bad value falls back to seconds too', () => {
+  assert.equal(parseArgs(['--command-timeout', '30'], {}).config.commandTimeoutMs, 30_000);
+
+  // The fallback used to be the default expressed in milliseconds, which was
+  // then multiplied by 1000 again — a thirty-three hour timeout.
+  const { config } = parseArgs(['--command-timeout', 'nonsense'], {});
+  assert.equal(config.commandTimeoutMs, 120_000);
+});
+
+test('the advertised budget ceiling matches the one the server enforces', () => {
+  assert.equal(parseArgs([], {}).config.maxTokenBudget, MAX_TOKEN_BUDGET);
+});
+
+test('the default budget is never allowed above the ceiling', () => {
+  const { config } = parseArgs([], { JELLYBEAN_TOKEN_BUDGET: '999999' });
+  assert.equal(config.defaultTokenBudget, MAX_TOKEN_BUDGET);
+});
+
+test('the first positional argument is the workspace root', () => {
+  assert.ok(parseArgs(['/tmp/somewhere'], {}).config.root.endsWith('somewhere'));
+});
+
+test('an unknown flag is rejected rather than ignored', () => {
+  assert.throws(() => parseArgs(['--not-a-flag'], {}), /Unknown option/);
 });
 
 // --- ignore rules -----------------------------------------------------------
