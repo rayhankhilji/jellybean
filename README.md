@@ -73,18 +73,18 @@ Real numbers from this repository, using Jelly Bean's own token estimator:
 | Target | Read in full | `jb_outline` | `jb_read` skeleton |
 |---|---|---|---|
 | `src/lang/outline.ts` | 5,962 | **724** — 88% less | 2,058 — 65% less |
-| `src/core/code-index.ts` | 4,031 | **888** — 78% less | 2,026 — 50% less |
-| `src/tools/search.ts` | 3,967 | **392** — 90% less | 1,380 — 65% less |
+| `src/core/code-index.ts` | 4,283 | **892** — 79% less | 2,102 — 51% less |
+| `src/tools/search.ts` | 3,989 | **392** — 90% less | 1,384 — 65% less |
 | `src/diagnostics/parsers.ts` | 4,343 | **527** — 88% less | 1,482 — 66% less |
 
-And for whole-repository orientation — 38 files, 84,369 tokens of source:
+And for whole-repository orientation — 43 files, 93,671 tokens of source:
 
 | Call | Tokens | |
 |---|---|---|
-| Reading every file | 84,369 | — |
-| `jb_map {depth:"symbols"}` | 2,663 | **97% less** |
-| `jb_map {depth:"files"}` | 597 | **99% less** |
-| `jb_map {depth:"tree"}` | 106 | **99.9% less** |
+| Reading every file | 93,671 | — |
+| `jb_map {depth:"symbols"}` | 2,807 | **97% less** |
+| `jb_map {depth:"files"}` | 673 | **99.3% less** |
+| `jb_map {depth:"tree"}` | 164 | **99.8% less** |
 
 Reproduce with `npm run build && node dist/index.js --help`, or read
 [`test/tools.test.ts`](test/tools.test.ts), where the budget guarantees are
@@ -136,18 +136,21 @@ being depended upon, because those are the files worth seeing first. Pass
 ```
 jb_map {depth:"tree"}
 
-jb_map — jellybean-mcp  38 files  7.3k lines  typescript×34 json×3 text×1
+jb_map — jellybean-mcp  43 files  8.1k lines  typescript×34 json×3 text×2 markdown×2 yaml×1
 
-./  4 files  104L  json×3 text×1
+./  7 files  678L  json×3 text×2 markdown×2
+  .github/
+    workflows/  1 file  46L  yaml×1
+  scripts/  1 file  44L  javascript×1
   src/  3 files  494L  typescript×3
     core/  8 files  1.4kL  typescript×8
-    diagnostics/  2 files  661L  typescript×2
+    diagnostics/  2 files  700L  typescript×2
     lang/  6 files  1.5kL  typescript×6
     tools/  8 files  1.7kL  typescript×8
-    util/  1 file  85L  typescript×1
-  test/  6 files  1.3kL  typescript×6
+    util/  1 file  78L  typescript×1
+  test/  6 files  1.4kL  typescript×6
 
-[106/2000 tok]
+[140/2000 tok]
 next: jb_map {path:"<dir>", depth:"symbols"} to see what a directory contains
 ```
 
@@ -163,25 +166,27 @@ without paying for the other forty.
 ```
 jb_outline {path:"src/core/handles.ts"}
 
-jb_outline — src/core/handles.ts  1 file  17 symbols
+jb_outline — src/core/handles.ts  1 file  16 symbols
 
-src/core/handles.ts  87L  typescript  17 symbols
+src/core/handles.ts  83L  typescript  16 symbols
   export interface HandleTarget  jb_6dcfec6b  :16-27
     path: string  :18
     startLine: number  :20
     endLine: number  :22
     kind: string  :24
     label: string  :26
-  export class HandleStore  jb_342e6a64  :40-76
+  const ID_PREFIX = 'jb_'  jb_37efc771  :29  private
+  const ID_PATTERN = /^jb_[0-9a-f]{8}$/  jb_4ccdce46  :30  private
+  export class HandleStore  jb_fa7adbb4  :40-72
+    private readonly entries = new Map<string, HandleTarget>()  :41  private
     constructor(private readonly capacity = 4096) {}  jb_3bdc2fcf  :43
     mint(target: HandleTarget): string  jb_38a494b4  :46-58
     get(id: string): HandleTarget | undefined  jb_2ad5be16  :61-67
     get size(): number  jb_4f944248  :69-71
-    clear(): void  jb_a2add99c  :73-75
-  export function handleId(target: HandleTarget): string  jb_70f11a47  :79-82
-  export function isHandle(value: string): boolean  jb_f1f2e211  :85-87
+  export function handleId(target: HandleTarget): string  jb_bf57b96c  :75-78
+  export function isHandle(value: string): boolean  jb_8706f6fb  :81-83
 
-[282/700 tok]
+[269/700 tok]
 ```
 
 Works on a directory too, in which case it defaults to exported symbols only.
@@ -201,10 +206,10 @@ jb_search {query:"least recently used eviction"}
 jb_search — "least recently used eviction"  auto
 
 src/core/handles.ts  3 hits  typescript
-  → HandleStore  jb_342e6a64  :60
-    /** Look up a handle, marking it as recently used. */
   → :37  jb_853fa374
     * least-recently-used, and because IDs are content-derived, an evicted handle
+  → HandleStore  jb_fa7adbb4  :60
+    /** Look up a handle, marking it as recently used. */
 src/core/tokens.ts  8 hits  typescript
   → push  jb_b7a4164c  :110
     if (this.used + cost > this.budget - this.reserved) {
@@ -436,7 +441,7 @@ storing line-level postings would be far larger for no ranking benefit.
 ```bash
 npm install
 npm run build       # compile to dist/
-npm test            # 109 tests
+npm test            # 110 tests
 npm run typecheck   # no emit
 ```
 

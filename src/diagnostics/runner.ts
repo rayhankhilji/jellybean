@@ -12,6 +12,8 @@
  */
 
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
 import type { Workspace } from '../core/workspace.js';
 
 export interface Check {
@@ -151,18 +153,71 @@ export function splitCommand(command: string): string[] {
   return argv;
 }
 
+/** Characters cmd.exe treats as syntax. None may appear in a Windows argument. */
+const CMD_METACHARACTERS = /[&|<>^"%!()\r\n]/;
+
+/**
+ * Locate an executable by name, honouring `PATHEXT` on Windows.
+ *
+ * Needed because `npm` on Windows is `npm.cmd`, and `spawn` with `shell: false`
+ * will not find it by bare name.
+ */
+function resolveExecutable(command: string): string {
+  if (process.platform !== 'win32') return command;
+  if (command.includes('/') || command.includes('\\')) return command;
+
+  const extensions = (process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean);
+  const directories = (process.env['PATH'] ?? '').split(delimiter).filter(Boolean);
+
+  for (const directory of directories) {
+    for (const extension of ['', ...extensions]) {
+      const candidate = join(directory, command + extension);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return command;
+}
+
+/**
+ * Build the argv actually handed to `spawn`.
+ *
+ * Windows cannot execute a `.cmd` or `.bat` without a command interpreter, and
+ * since Node 20.12 it refuses to try. The obvious fix — `shell: true` — joins
+ * every argument into one string for cmd.exe to re-parse, which is exactly the
+ * injection surface this module exists to avoid.
+ *
+ * So we invoke cmd.exe ourselves, keeping arguments as separate argv entries
+ * (Node quotes each), and refuse outright if any argument contains a character
+ * cmd.exe would treat as syntax. Nothing a caller supplies can then be
+ * reinterpreted as a command.
+ */
+function buildSpawnArgs(argv: readonly string[]): { file: string; args: string[] } | { error: string } {
+  const [command, ...rest] = argv;
+  if (!command) return { error: 'empty command' };
+
+  const resolved = resolveExecutable(command);
+  const isBatch = /\.(?:cmd|bat)$/i.test(resolved);
+  if (process.platform !== 'win32' || !isBatch) return { file: resolved, args: rest };
+
+  const offending = argv.find((part) => CMD_METACHARACTERS.test(part));
+  if (offending !== undefined) {
+    return { error: `refusing to run on Windows: argument ${JSON.stringify(offending)} contains shell syntax` };
+  }
+  return { file: process.env['ComSpec'] ?? 'cmd.exe', args: ['/d', '/s', '/c', resolved, ...rest] };
+}
+
 /** Run a command inside the workspace, capturing combined output. */
 export function run(argv: readonly string[], cwd: string, timeoutMs: number): Promise<RunResult> {
   const started = Date.now();
-  const [command, ...args] = argv;
+  const plan = buildSpawnArgs(argv);
 
   return new Promise<RunResult>((resolvePromise) => {
-    if (!command) {
+    if ('error' in plan) {
       resolvePromise({
         argv: [...argv],
         exitCode: null,
         signal: null,
-        output: 'empty command',
+        output: plan.error,
         durationMs: 0,
         timedOut: false,
         truncated: false,
@@ -170,7 +225,7 @@ export function run(argv: readonly string[], cwd: string, timeoutMs: number): Pr
       return;
     }
 
-    const child = spawn(command, args, {
+    const child = spawn(plan.file, plan.args, {
       cwd,
       shell: false,
       windowsHide: true,
@@ -223,7 +278,7 @@ export function run(argv: readonly string[], cwd: string, timeoutMs: number): Pr
     };
 
     child.on('error', (error) => {
-      settle(null, null, `\nfailed to start ${command}: ${(error as Error).message}`);
+      settle(null, null, `\nfailed to start ${argv[0]}: ${(error as Error).message}`);
     });
     child.on('close', (code, signal) => settle(code, signal));
   });

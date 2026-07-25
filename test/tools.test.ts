@@ -35,9 +35,9 @@ const FILES: Record<string, string> = {
         test: 'echo ok',
         lint: 'echo ok',
         // Emits two adjacent compiler-style errors, so excerpt merging is testable
-        // without depending on a real toolchain being installed.
-        'fake-errors':
-          "echo 'src/store.ts(5,5): error TS1111: first problem' && echo 'src/store.ts(6,5): error TS2222: second problem' && exit 1",
+        // without depending on a real toolchain. Delegated to a script file rather
+        // than inline `echo`, because cmd.exe and sh disagree about quoting.
+        'fake-errors': 'node emit-errors.cjs',
       },
     },
     null,
@@ -88,6 +88,11 @@ const FILES: Record<string, string> = {
     '}',
   ].join('\n'),
   'test/store.test.ts': ["import { createStore } from '../src/store.js';", '', 'createStore();'].join('\n'),
+  'emit-errors.cjs': [
+    "console.log('src/store.ts(5,5): error TS1111: first problem');",
+    "console.log('src/store.ts(6,5): error TS2222: second problem');",
+    'process.exit(1);',
+  ].join('\n'),
   'generated/huge.ts': 'export const IGNORED = 1;\n',
   'notes.tmp': 'should be ignored\n',
 };
@@ -440,8 +445,10 @@ test('paths outside the workspace are refused', async () => {
   await withWorkspace(async (ctx) => {
     assert.throws(() => ctx.workspace.resolve('../../etc/passwd'), PathEscapeError);
     assert.throws(() => ctx.workspace.resolve('/etc/passwd'), PathEscapeError);
-    // A path that merely contains '..' but stays inside is fine.
-    assert.ok(ctx.workspace.resolve('src/../src/index.ts').endsWith('src/index.ts'));
+
+    // A path that merely contains '..' but stays inside is fine. Compare through
+    // relativize so the assertion does not depend on the platform separator.
+    assert.equal(ctx.workspace.relativize(ctx.workspace.resolve('src/../src/index.ts')), 'src/index.ts');
   });
 });
 
