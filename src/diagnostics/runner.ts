@@ -170,7 +170,11 @@ function resolveExecutable(command: string): string {
   const directories = (process.env['PATH'] ?? '').split(delimiter).filter(Boolean);
 
   for (const directory of directories) {
-    for (const extension of ['', ...extensions]) {
+    // Extensions before the bare name, which is what Windows itself does. The
+    // order matters concretely: Node ships an extension-less `npm` next to
+    // `npm.cmd` — a Unix shell script that Windows cannot execute — so trying
+    // the bare name first finds a file that exists and then fails with ENOENT.
+    for (const extension of [...extensions, '']) {
       const candidate = join(directory, command + extension);
       if (existsSync(candidate)) return candidate;
     }
@@ -191,19 +195,36 @@ function resolveExecutable(command: string): string {
  * cmd.exe would treat as syntax. Nothing a caller supplies can then be
  * reinterpreted as a command.
  */
-function buildSpawnArgs(argv: readonly string[]): { file: string; args: string[] } | { error: string } {
+interface SpawnPlan {
+  file: string;
+  args: string[];
+  /** Pass our argument string to Windows untouched, because we quoted it ourselves. */
+  verbatim: boolean;
+}
+
+function buildSpawnArgs(argv: readonly string[]): SpawnPlan | { error: string } {
   const [command, ...rest] = argv;
   if (!command) return { error: 'empty command' };
 
   const resolved = resolveExecutable(command);
   const isBatch = /\.(?:cmd|bat)$/i.test(resolved);
-  if (process.platform !== 'win32' || !isBatch) return { file: resolved, args: rest };
+  if (process.platform !== 'win32' || !isBatch) return { file: resolved, args: rest, verbatim: false };
 
   const offending = argv.find((part) => CMD_METACHARACTERS.test(part));
   if (offending !== undefined) {
     return { error: `refusing to run on Windows: argument ${JSON.stringify(offending)} contains shell syntax` };
   }
-  return { file: process.env['ComSpec'] ?? 'cmd.exe', args: ['/d', '/s', '/c', resolved, ...rest] };
+
+  // `cmd /s /c` strips the first and last quote of the whole string and treats
+  // everything between them literally. So build one argument, quote the parts
+  // that need it, and wrap the result — otherwise a path like
+  // `C:\Program Files\nodejs\npm.cmd` is split at the space.
+  const inner = [resolved, ...rest].map((part) => (/\s/.test(part) ? `"${part}"` : part)).join(' ');
+  return {
+    file: process.env['ComSpec'] ?? 'cmd.exe',
+    args: ['/d', '/s', '/c', `"${inner}"`],
+    verbatim: true,
+  };
 }
 
 /** Run a command inside the workspace, capturing combined output. */
@@ -229,6 +250,7 @@ export function run(argv: readonly string[], cwd: string, timeoutMs: number): Pr
       cwd,
       shell: false,
       windowsHide: true,
+      windowsVerbatimArguments: plan.verbatim,
       // CI=1 makes most test runners disable colour, spinners, and interactive
       // prompts — all of which are pure token waste in captured output.
       env: { ...process.env, CI: '1', NO_COLOR: '1', FORCE_COLOR: '0' },
