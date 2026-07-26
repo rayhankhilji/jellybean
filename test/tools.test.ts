@@ -29,6 +29,8 @@ import { runChanges } from '../src/tools/changes.js';
 import { runDefine } from '../src/tools/define.js';
 import type { ToolContext } from '../src/tools/context.js';
 import { run } from '../src/diagnostics/runner.js';
+import { ParseCache } from '../src/core/cache.js';
+import { readFile } from 'node:fs/promises';
 
 const FILES: Record<string, string> = {
   'package.json': JSON.stringify(
@@ -743,5 +745,30 @@ test('jb_define says so when nothing declares the name', async () => {
     const output = await runDefine({ symbol: 'NoSuchSymbolAnywhere' }, ctx);
     assert.ok(output.includes('not found'), output);
     assert.ok(output.includes('external package'), 'the error did not suggest why');
+  });
+});
+
+test('a cache written by an older parser generation is not trusted', async () => {
+  await withWorkspace(async (ctx) => {
+    // The cache key is (path, size, mtime), which cannot notice that our own
+    // parsing changed. CACHE_VERSION is the only thing standing between a
+    // parser improvement and every existing cache confidently serving the old
+    // answer, so verify that a mismatched generation is discarded outright.
+    const cache = ParseCache.forWorkspace(ctx.workspace.root);
+    await cache.load(ctx.workspace.root);
+    assert.ok(cache.size > 0, 'the first index should have written a cache');
+
+    const raw = JSON.parse(await readFile(cache.path, 'utf8')) as { version: number };
+    assert.equal(typeof raw.version, 'number');
+    await writeFile(cache.path, JSON.stringify({ ...raw, version: raw.version - 1 }), 'utf8');
+
+    const stale = ParseCache.forWorkspace(ctx.workspace.root);
+    await stale.load(ctx.workspace.root);
+    assert.equal(stale.size, 0, 'a cache from a different generation was accepted');
+
+    // And the index still works, by re-parsing.
+    const rebuilt = new CodeIndex(ctx.workspace, ctx.config);
+    await rebuilt.ensureFresh(true);
+    assert.ok(rebuilt.get('src/store.ts')?.symbols.some((s) => s.name === 'createStore'));
   });
 });

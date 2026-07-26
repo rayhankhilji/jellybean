@@ -17,8 +17,21 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { CodeSymbol, ImportRef, LanguageId } from '../lang/types.js';
 
-/** Bump when the shape of a cached record changes in a way that alters meaning. */
-const CACHE_VERSION = 3;
+/**
+ * Cache generation. **Bump this whenever parse output changes.**
+ *
+ * Not just when the record's *shape* changes — whenever the same input would now
+ * produce a different result. Adding a declaration pattern, fixing an extent,
+ * changing how a term is tokenised: all of those make every existing entry a
+ * lie, and the key is (path, size, mtime), which cannot notice that our own code
+ * changed.
+ *
+ * This has bitten once already. Re-export symbols were added to the outline and
+ * every cached repository kept reporting barrel files as empty, because the
+ * files themselves had not been touched. The symptom is the worst kind: correct
+ * new code, confidently stale answers.
+ */
+const CACHE_VERSION = 4;
 
 /**
  * One file's parse output. Keys are single characters because this structure is

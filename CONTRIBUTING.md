@@ -48,6 +48,19 @@ Add a `scan*` function to `src/diagnostics/parsers.ts`, register it in
 Fabricated samples tend to be tidier than the real thing and hide the cases that
 matter. Overlapping parsers are fine — `dedupe` keeps the richer result.
 
+## If you change how anything is parsed
+
+**Bump `CACHE_VERSION` in `src/core/cache.ts`.**
+
+Parses are cached on disk keyed by path, size and mtime. That key cannot notice
+that *our* code changed, so a new declaration pattern, a corrected extent, or a
+different tokenisation leaves every existing cache entry serving the old answer —
+on files nobody has touched. The symptom is correct new code and confidently
+stale results, which is a genuinely unpleasant afternoon.
+
+This has already happened once, which is why the comment on that constant is as
+loud as it is.
+
 ## Things the codebase cares about
 
 - **Budgets are contracts.** Anything that emits rows goes through

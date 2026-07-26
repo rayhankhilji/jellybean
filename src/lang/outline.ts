@@ -53,9 +53,62 @@ export function extractSymbols(source: string, language: LanguageId, masked?: st
   if (patterns.length === 0) return [];
 
   masked ??= maskSource(source, syntaxFor(language));
+
+  if (language === 'typescript' || language === 'javascript') {
+    // A barrel file declares nothing and is nonetheless entirely meaningful.
+    // Without this, `jb_outline` on one of the commonest files in any JS
+    // monorepo answers "no symbols found", which is true and useless.
+    return [...extractBraced(source, masked, language), ...extractReExports(source, masked)].sort(
+      (a, b) => a.startLine - b.startLine,
+    );
+  }
+
   if (BRACE_LANGUAGES.has(language)) return extractBraced(source, masked, language);
   if (INDENT_LANGUAGES.has(language)) return extractIndented(source, masked, language);
   return extractFlat(source, masked, language);
+}
+
+/**
+ * Re-export statements, as symbols.
+ *
+ * `export * from './packet.interface'` declares nothing, so no declaration
+ * pattern matches it and a barrel file outlines as empty. But the statement *is*
+ * the file's content, and an agent asking what is in the file needs to be told
+ * where to look next.
+ *
+ * Each statement becomes one symbol named for its specifier — not for the names
+ * it forwards, which are unknowable without following it. Claiming those names
+ * are declared here would be a lie the agent would then act on.
+ *
+ * Runs against the original source, because the specifier lives in a string
+ * literal that masking has erased. The mask is still consulted to skip lines
+ * that are entirely commented out.
+ */
+function extractReExports(source: string, masked: string): CodeSymbol[] {
+  const lines = toLines(source);
+  const mlines = toLines(masked);
+  const pattern = /^\s*export\s+(?:\*(?:\s+as\s+[\w$]+)?|\{[^}]*\})\s*from\s*['"]([^'"]+)['"]/;
+
+  const symbols: CodeSymbol[] = [];
+  for (let i = 0; i < lines.length && symbols.length < MAX_SYMBOLS; i++) {
+    // Blank in the mask but not in the source means the line is a comment.
+    if ((mlines[i] ?? '').trim() === '' && lines[i]!.trim() !== '') continue;
+
+    const specifier = pattern.exec(lines[i]!)?.[1];
+    if (!specifier) continue;
+
+    symbols.push({
+      name: specifier,
+      kind: 'module',
+      startLine: i + 1,
+      endLine: i + 1,
+      depth: 0,
+      // The statement itself is the clearest possible description of itself.
+      signature: truncate(squish(lines[i]!.replace(/;\s*$/, '')), 200),
+      exported: true,
+    });
+  }
+  return symbols;
 }
 
 // ---------------------------------------------------------------------------

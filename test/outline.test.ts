@@ -223,6 +223,49 @@ test('rust: trait items and trait impls are public, inherent impls need pub', ()
   assert.equal(find(symbols, 'inherent_private').exported, false, 'an inherent impl method needs pub to be public');
 });
 
+test('typescript: a barrel file outlines its re-exports', () => {
+  // Declares nothing, and is entirely meaningful. Reporting "no symbols" here is
+  // true and useless, and barrel files are everywhere in a JS monorepo.
+  const source = [
+    "export * from './packet.interface';",
+    "export * from './pattern.interface';",
+    "export { Client } from './client.js';",
+    "export * as helpers from './helpers.js';",
+  ].join('\n');
+
+  const symbols = extractSymbols(source, 'typescript');
+  assert.equal(symbols.length, 4, symbols.map((s) => s.name).join(', '));
+  assert.equal(find(symbols, './packet.interface').kind, 'module');
+  assert.equal(find(symbols, './packet.interface').startLine, 1);
+  assert.ok(find(symbols, './packet.interface').signature.includes('export *'));
+  assert.ok(
+    symbols.every((s) => s.exported),
+    're-exports are by definition exported',
+  );
+});
+
+test('typescript: a commented-out re-export is not a symbol', () => {
+  const source = ["// export * from './ghost.js';", "export * from './real.js';"].join('\n');
+  const names = extractSymbols(source, 'typescript').map((s) => s.name);
+  assert.deepEqual(names, ['./real.js']);
+});
+
+test('typescript: re-exports and declarations coexist in line order', () => {
+  const source = [
+    "export * from './a.js';",
+    'export function local(): void {}',
+    "export * from './b.js';",
+  ].join('\n');
+
+  const symbols = extractSymbols(source, 'typescript');
+  assert.deepEqual(
+    symbols.map((s) => s.startLine),
+    [1, 2, 3],
+    'symbols must be ordered by position, not by which pass found them',
+  );
+  assert.deepEqual(symbols.map((s) => s.name), ['./a.js', 'local', './b.js']);
+});
+
 test('markdown: headings nest and own the text beneath them', () => {
   const source = ['# Title', 'intro', '## First', 'body', '## Second', 'more', '# Next'].join('\n');
   const symbols = extractSymbols(source, 'markdown');
