@@ -56,7 +56,7 @@ test('the server completes a handshake and advertises its instructions', async (
   }
 });
 
-test('all eight tools are listed with descriptions and schemas', async () => {
+test('all nine tools are listed with descriptions and schemas', async () => {
   const client = await connect();
   try {
     const { tools } = await client.listTools();
@@ -64,6 +64,7 @@ test('all eight tools are listed with descriptions and schemas', async () => {
 
     assert.deepEqual(names, [
       'jb_changes',
+      'jb_define',
       'jb_diagnose',
       'jb_map',
       'jb_notes',

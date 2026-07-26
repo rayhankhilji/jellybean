@@ -18,6 +18,7 @@ import { runTrace, traceSchema } from './tools/trace.js';
 import { diagnoseSchema, runDiagnose } from './tools/diagnose.js';
 import { notesSchema, runNotes } from './tools/notes.js';
 import { changesSchema, runChanges } from './tools/changes.js';
+import { defineSchema, runDefine } from './tools/define.js';
 
 export const SERVER_NAME = 'jellybean';
 export const SERVER_VERSION = '1.0.0';
@@ -36,10 +37,11 @@ Work outside-in:
   2. jb_outline  — one file's declarations without their bodies (~10x cheaper than reading it).
   3. jb_search   — ranked search returning matched lines, not whole files.
   4. jb_read     — read a specific region, usually via a handle from step 1–3.
-  5. jb_trace    — what depends on this symbol or file, and what it depends on.
-  6. jb_changes  — what you changed, by symbol, and what depends on it.
-  7. jb_diagnose — run a project check; get parsed problems instead of a raw log.
-  8. jb_notes    — record and recall findings across sessions.
+  5. jb_define   — resolve a name to its definition, following the imports of the file using it.
+  6. jb_trace    — what depends on this symbol or file, and what it depends on.
+  7. jb_changes  — what you changed, by symbol, and what depends on it.
+  8. jb_diagnose — run a project check; get parsed problems instead of a raw log.
+  9. jb_notes    — record and recall findings across sessions.
 
 Handles: results contain ids like jb_3f9a21c4 that address an exact region. Pass one to
 jb_read instead of a path when you can — it is precise and already scoped to the symbol.
@@ -124,6 +126,18 @@ function registerTools(server: McpServer, ctx: ToolContext): void {
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     },
     guard(runRead, ctx),
+  );
+
+  server.registerTool(
+    'jb_define',
+    {
+      title: 'Resolve a symbol to its definition',
+      description:
+        'Where is this actually defined? Pass "from" — the file where you saw the name used — and it follows that file\'s imports to the real declaration, through barrel re-exports. Unlike a name search it resolves rather than ranks, and when the answer is genuinely ambiguous it says so instead of guessing.',
+      inputSchema: defineSchema,
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    guard(runDefine, ctx),
   );
 
   server.registerTool(

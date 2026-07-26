@@ -80,6 +80,8 @@ export class CodeIndex {
    * seconds; this makes an exact-name lookup constant time.
    */
   private symbolNames = new Map<string, Set<number>>();
+  /** Final path segment → paths, retained so imports can be resolved on demand. */
+  private byBasename = new Map<string, string[]>();
   private averageTermCount = 1;
   private nextIndex = 0;
 
@@ -244,8 +246,7 @@ export class CodeIndex {
       record.skipped = cached.k;
       this.applyTerms(record, unpackTerms(cached.t));
 
-      this.files.set(record.path, record);
-      this.byIndex[record.index] = record;
+      this.commit(record);
       this.cacheHits++;
       return;
     }
@@ -287,6 +288,19 @@ export class CodeIndex {
       k: record.skipped,
     });
 
+    this.commit(record);
+  }
+
+  /**
+   * Install a finished record into every structure that must know about it.
+   *
+   * One function rather than open-coding it at each call site, because there are
+   * two paths into the index — cached and freshly parsed — and they *did* drift:
+   * the cached path once omitted the symbol-name registration, which silently
+   * emptied the name index on any warm start and made symbol lookups return
+   * nothing at all.
+   */
+  private commit(record: FileRecord): void {
     this.files.set(record.path, record);
     this.byIndex[record.index] = record;
     this.addSymbolNames(record);
@@ -324,6 +338,23 @@ export class CodeIndex {
    * Files declaring a symbol with exactly this name. Undefined when none do,
    * which lets callers skip a repository-wide scan entirely.
    */
+  private resolutionContext(): ResolutionContext {
+    return {
+      has: (path) => this.files.has(path),
+      byBasename: (name) => this.byBasename.get(name) ?? [],
+    };
+  }
+
+  /**
+   * Resolve one import specifier as written in `fromPath`. Returns null for an
+   * external package or an unresolvable path — the same judgement the graph makes.
+   */
+  resolveImport(fromPath: string, specifier: string): string | null {
+    const from = this.files.get(fromPath);
+    if (!from) return null;
+    return resolveSpecifier(specifier, fromPath, from.language, this.resolutionContext());
+  }
+
   /** Every distinct symbol name in the workspace, with the files declaring it. */
   allSymbolNames(): IterableIterator<[string, ReadonlySet<number>]> {
     return this.symbolNames.entries();
@@ -466,19 +497,17 @@ export class CodeIndex {
     }
 
     // Basename index, so the resolver can match `pkg/util` against `src/pkg/util.go`
-    // without scanning every path for every import.
-    const byBasename = new Map<string, string[]>();
+    // without scanning every path for every import. Kept afterwards so a single
+    // specifier can be resolved later without rebuilding it.
+    this.byBasename = new Map<string, string[]>();
     for (const path of this.files.keys()) {
       const name = path.slice(path.lastIndexOf('/') + 1);
-      const bucket = byBasename.get(name);
+      const bucket = this.byBasename.get(name);
       if (bucket) bucket.push(path);
-      else byBasename.set(name, [path]);
+      else this.byBasename.set(name, [path]);
     }
 
-    const ctx: ResolutionContext = {
-      has: (path) => this.files.has(path),
-      byBasename: (name) => byBasename.get(name) ?? [],
-    };
+    const ctx = this.resolutionContext();
 
     for (const record of this.files.values()) {
       for (const ref of record.imports) {

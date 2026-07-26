@@ -183,7 +183,7 @@ node scripts/demo.mjs /path/to/your/repo --check test
 The tour ends by comparing what it printed against the cost of reading the
 repository in full.
 
-## The eight tools
+## The nine tools
 
 ### `jb_map` — orient yourself
 
@@ -313,6 +313,29 @@ and elides function bodies:
    | … 6 lines
 172| }
 ```
+
+### `jb_define` — where is this actually defined?
+
+Distinct from a name search, which ranks. This *resolves*. An agent reading
+`store.load()` in a repository with five `load` declarations cannot tell from a
+ranked list which one it is looking at; given `from`, this follows that file's own
+import statements — through barrel re-exports — and answers precisely.
+
+```
+jb_define {symbol:"BudgetWriter", from:"src/tools/map.ts"}
+
+jb_define — BudgetWriter  imported from ../core/tokens.js
+
+→ src/core/tokens.ts:64  class  jb_5974455a
+  export class BudgetWriter
+  — Accumulates lines while enforcing a token ceiling.
+
+12 files import src/core/tokens.ts
+```
+
+When resolution is genuinely ambiguous it says so and lists the candidates,
+rather than picking one and letting the agent build on a wrong answer. Add
+`body:true` for the source.
 
 ### `jb_trace` — what breaks if I change this
 
@@ -543,7 +566,7 @@ name index.
 ```bash
 npm install
 npm run build       # compile to dist/
-npm test            # 132 tests
+npm test            # 138 tests
 npm run typecheck   # no emit
 npm run demo        # guided tour of every tool
 node scripts/benchmark.mjs <repo>   # reproduce the numbers above

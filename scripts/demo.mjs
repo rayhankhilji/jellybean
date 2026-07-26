@@ -36,6 +36,7 @@ try {
     diagnose: await import(pathToUrl(join(dist, 'tools/diagnose.js'))),
     notesTool: await import(pathToUrl(join(dist, 'tools/notes.js'))),
     changes: await import(pathToUrl(join(dist, 'tools/changes.js'))),
+    define: await import(pathToUrl(join(dist, 'tools/define.js'))),
   };
 } catch (error) {
   process.stderr.write(`Could not load the build. Run "npm run build" first.\n\n${error.message}\n`);
@@ -148,13 +149,25 @@ show(
   await modules.read.runRead({ path: star.path, mode: 'skeleton', tokenBudget: 900 }, ctx),
 );
 
-section('5. jb_trace — "what breaks if I change this?"', 'The import graph in both directions, with tests and entrypoints labelled.');
+section('5. jb_define — "where is this actually defined?"', "Follows the importing file's own imports, so it resolves rather than guesses.");
+{
+  const user = ctx.index.all().find((f) => f.imports.some((i) => i.names.length > 0));
+  const ref = user?.imports.find((i) => i.names.length > 0);
+  if (user && ref) {
+    show(
+      `jb_define {symbol:"${ref.names[0]}", from:"${user.path}"}`,
+      await modules.define.runDefine({ symbol: ref.names[0], from: user.path, tokenBudget: 500 }, ctx),
+    );
+  }
+}
+
+section('6. jb_trace — "what breaks if I change this?"', 'The import graph in both directions, with tests and entrypoints labelled.');
 show(`jb_trace {path:"${star.path}", direction:"both"}`, await modules.trace.runTrace({ path: star.path, direction: 'both', tokenBudget: 700 }, ctx));
 
-section('6. jb_changes — "what did I change, and what might it break?"', 'Your edits mapped onto the symbols they touched, plus what depends on them.');
+section('7. jb_changes — "what did I change, and what might it break?"', 'Your edits mapped onto the symbols they touched, plus what depends on them.');
 show('jb_changes {}', await modules.changes.runChanges({ tokenBudget: 900 }, ctx));
 
-section('7. jb_diagnose — "what is broken right now?"', 'Runs a check the project itself declares and returns problems, not log output.');
+section('8. jb_diagnose — "what is broken right now?"', 'Runs a check the project itself declares and returns problems, not log output.');
 show('jb_diagnose {}   ← no arguments lists what it is willing to run', await modules.diagnose.runDiagnose({ tokenBudget: 700 }, ctx));
 
 if (requestedCheck) {
@@ -171,7 +184,7 @@ if (requestedCheck) {
   );
 }
 
-section('8. jb_notes — "remember this for next time"', 'Findings persist in .jellybean/notes.json and resurface in jb_trace.');
+section('9. jb_notes — "remember this for next time"', 'Findings persist in .jellybean/notes.json and resurface in jb_trace.');
 show('jb_notes {action:"list"}', await modules.notesTool.runNotes({ action: 'list', tokenBudget: 400 }, ctx));
 
 // --- the point --------------------------------------------------------------

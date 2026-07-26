@@ -26,6 +26,7 @@ import { runTrace } from '../src/tools/trace.js';
 import { runDiagnose } from '../src/tools/diagnose.js';
 import { runNotes } from '../src/tools/notes.js';
 import { runChanges } from '../src/tools/changes.js';
+import { runDefine } from '../src/tools/define.js';
 import type { ToolContext } from '../src/tools/context.js';
 import { run } from '../src/diagnostics/runner.js';
 
@@ -678,5 +679,69 @@ test('jb_changes reports a missing repository rather than failing', async () => 
   await withWorkspace(async (ctx) => {
     const output = await runChanges({}, ctx);
     assert.ok(output.includes('not a git repository'), output);
+  });
+});
+
+test('symbol lookups still work on a warm start', async () => {
+  await withWorkspace(async (ctx) => {
+    // Regression guard. The cached and freshly-parsed index paths diverged: the
+    // cached one skipped registering symbol names, so every warm start left the
+    // name index empty and jb_define, jb_trace {symbol} and symbol search all
+    // silently found nothing. The existing rename test missed it because writing
+    // a file forces the parse path.
+    const warm = new CodeIndex(ctx.workspace, ctx.config);
+    await warm.ensureFresh(true);
+
+    assert.ok(warm.cacheHits > 0, 'this test is meaningless unless the cache was used');
+    assert.deepEqual(
+      warm.filesDeclaring('createStore').map((f) => f.path),
+      ['src/store.ts'],
+      'the symbol name index was not populated from cache',
+    );
+    assert.ok([...warm.allSymbolNames()].length > 0, 'the name index is empty after a warm start');
+  });
+});
+
+test('jb_define resolves a name through the importing file', async () => {
+  await withWorkspace(async (ctx) => {
+    const output = await runDefine({ symbol: 'createStore', from: 'src/index.ts' }, ctx);
+    assert.ok(output.includes('src/store.ts:'), output);
+    assert.ok(output.includes('imported from'), 'resolution did not go through the import');
+  });
+});
+
+test('jb_define finds a locally declared symbol', async () => {
+  await withWorkspace(async (ctx) => {
+    const output = await runDefine({ symbol: 'main', from: 'src/index.ts' }, ctx);
+    assert.ok(output.includes('src/index.ts:'), output);
+    assert.ok(output.includes('declared in this file'), output);
+  });
+});
+
+test('jb_define can return the definition source', async () => {
+  await withWorkspace(async (ctx) => {
+    const output = await runDefine({ symbol: 'createStore', from: 'src/index.ts', body: true }, ctx);
+    assert.ok(output.includes('return new Store();'), 'the body was not included');
+  });
+});
+
+test('jb_define admits ambiguity rather than guessing', async () => {
+  await withWorkspace(async (ctx) => {
+    // Two files declaring the same name, with no importing file to disambiguate.
+    await writeFile(join(ctx.workspace.root, 'src/a.ts'), 'export function shared(): void {}\n', 'utf8');
+    await writeFile(join(ctx.workspace.root, 'src/b.ts'), 'export function shared(): void {}\n', 'utf8');
+    await ctx.index.ensureFresh(true);
+
+    const output = await runDefine({ symbol: 'shared' }, ctx);
+    assert.ok(output.includes('ambiguous'), `ambiguity was not reported:\n${output}`);
+    assert.ok(output.includes('src/a.ts') && output.includes('src/b.ts'), 'not all candidates were listed');
+  });
+});
+
+test('jb_define says so when nothing declares the name', async () => {
+  await withWorkspace(async (ctx) => {
+    const output = await runDefine({ symbol: 'NoSuchSymbolAnywhere' }, ctx);
+    assert.ok(output.includes('not found'), output);
+    assert.ok(output.includes('external package'), 'the error did not suggest why');
   });
 });
