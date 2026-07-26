@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="904" height="298" viewBox="0 0 904 298" role="img" aria-label="jb_define — resolve, do not guess">
+<rect width="904" height="298" rx="10" fill="#12151d" stroke="#2b3040"/>
+<path d="M0 10a10 10 0 0 1 10-10h884a10 10 0 0 1 10 10v24H0z" fill="#1b1f2a"/>
+<line x1="0" y1="34" x2="904" y2="34" stroke="#2b3040"/>
+<circle cx="18" cy="17" r="5.5" fill="#ff5f57"/>
+<circle cx="35" cy="17" r="5.5" fill="#febc2e"/>
+<circle cx="52" cy="17" r="5.5" fill="#28c840"/>
+<text x="452" y="21" text-anchor="middle" fill="#8b93a7" font-family="ui-sans-serif,-apple-system,Segoe UI,sans-serif" font-size="12">jb_define — resolve, do not guess</text>
+<text x="18" y="64" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#28c840">› </tspan><tspan fill="#d6dae4" font-weight="bold">jb_define {symbol:&quot;BudgetWriter&quot;, from:&quot;src/tools/map.ts&quot;}</tspan></text>
+<text x="18" y="102" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#7fd1b9" font-weight="bold">jb_define —</tspan><tspan fill="#d6dae4"> BudgetWriter  imported from </tspan><tspan fill="#82aaff">../core/tokens.js</tspan></text>
+<text x="18" y="140" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">→ </tspan><tspan fill="#82aaff">src/core/tokens.ts</tspan><tspan fill="#6c7488">:64</tspan><tspan fill="#d6dae4">  class  </tspan><tspan fill="#c792ea">jb_5974455a</tspan></text>
+<text x="18" y="159" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  export class BudgetWriter</tspan></text>
+<text x="18" y="178" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  — Accumulates lines while enforcing a token ceiling.</tspan></text>
+<text x="18" y="216" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">12 files import </tspan><tspan fill="#82aaff">src/core/tokens.ts</tspan></text>
+<text x="18" y="254" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#6c7488">[65/500 tok]</tspan></text>
+<text x="18" y="273" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#7fd1b9" font-weight="bold">next:</tspan><tspan fill="#d6dae4"> jb_define {symbol:&quot;BudgetWriter&quot;, body:true} for the source, or jb_trace {symbol:&quot;BudgetWriter&quot;} for its callers</tspan></text>
+</svg>

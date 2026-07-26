@@ -23,6 +23,7 @@
     "start": "node dist/index.js",
     "dev": "tsc -p tsconfig.json --watch",
     "demo": "npm run build --silent && node scripts/demo.mjs",
+    "render": "npm run build --silent && node scripts/render-svg.mjs",
     "test": "node scripts/run-tests.mjs",
     "pretest": "tsc -p tsconfig.test.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",

@@ -12,6 +12,8 @@ and parsed diagnostics — every result under a token budget it actually honours
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-1.29-6b4fbb.svg)](https://modelcontextprotocol.io)
 
+<img src="docs/map.svg" alt="jb_map showing a repository tree in 106 tokens" width="700">
+
 </div>
 
 ---
@@ -247,6 +249,8 @@ src/core/handles.ts  83L  typescript  16 symbols
 [269/700 tok]
 ```
 
+<img src="docs/outline.svg" alt="jb_outline listing every declaration in a file with no bodies" width="680">
+
 Works on a directory too, in which case it defaults to exported symbols only.
 
 ### `jb_search` — ranked lines, not a list of files
@@ -273,6 +277,8 @@ src/core/tokens.ts  8 hits  typescript
     if (this.used + cost > this.budget - this.reserved) {
   … 2 more in this file
 ```
+
+<img src="docs/search.svg" alt="jb_search returning matched lines with their enclosing symbols" width="700">
 
 `mode:"symbol"` matches declaration names only and touches no files at all.
 `mode:"regex"` takes an exact pattern.
@@ -333,6 +339,8 @@ jb_define — BudgetWriter  imported from ../core/tokens.js
 12 files import src/core/tokens.ts
 ```
 
+<img src="docs/define.svg" alt="jb_define resolving a symbol through the importing file" width="700">
+
 When resolution is genuinely ambiguous it says so and lists the candidates,
 rather than picking one and letting the agent build on a wrong answer. Add
 `body:true` for the source.
@@ -357,6 +365,8 @@ jb_trace — estimateTokens in src/core/tokens.ts  dependents  depth 1
   test/tools.test.ts  4 references  test
     → :168  jb_554f50fd
 ```
+
+<img src="docs/trace.svg" alt="jb_trace listing the files that depend on a module" width="470">
 
 Notes anchored to the traced file surface here automatically.
 
@@ -593,6 +603,7 @@ npm run build       # compile to dist/
 npm test            # 144 tests
 npm run typecheck   # no emit
 npm run demo        # guided tour of every tool
+npm run render      # regenerate the README's SVG renders from live output
 node scripts/benchmark.mjs <repo>   # reproduce the numbers above
 ```
 
@@ -606,6 +617,11 @@ pass while a server fails to speak the protocol at all.
 ## Design notes
 
 A few decisions that might look arbitrary:
+
+**The README's screenshots are generated.** `npm run render` produces them as SVG
+from real tool output, so they cannot quietly drift away from what the tools
+actually print — which is the failure mode of every hand-taken screenshot. SVG
+also stays diffable in git and needs no image hosting.
 
 **Output is not JSON.** Braces, quotes, and repeated key names roughly double the
 token cost of a result, and a model parses aligned rows just as reliably. The

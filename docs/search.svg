@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="705" height="526" viewBox="0 0 705 526" role="img" aria-label="jb_search — ranked lines, not a list of files">
+<rect width="705" height="526" rx="10" fill="#12151d" stroke="#2b3040"/>
+<path d="M0 10a10 10 0 0 1 10-10h685a10 10 0 0 1 10 10v24H0z" fill="#1b1f2a"/>
+<line x1="0" y1="34" x2="705" y2="34" stroke="#2b3040"/>
+<circle cx="18" cy="17" r="5.5" fill="#ff5f57"/>
+<circle cx="35" cy="17" r="5.5" fill="#febc2e"/>
+<circle cx="52" cy="17" r="5.5" fill="#28c840"/>
+<text x="352.5" y="21" text-anchor="middle" fill="#8b93a7" font-family="ui-sans-serif,-apple-system,Segoe UI,sans-serif" font-size="12">jb_search — ranked lines, not a list of files</text>
+<text x="18" y="64" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#28c840">› </tspan><tspan fill="#d6dae4" font-weight="bold">jb_search {query:&quot;least recently used&quot;}</tspan></text>
+<text x="18" y="102" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#7fd1b9" font-weight="bold">jb_search —</tspan><tspan fill="#d6dae4"> &quot;least recently used&quot;  auto</tspan></text>
+<text x="18" y="140" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#82aaff">src/core/handles.ts</tspan><tspan fill="#d6dae4">  2 hits  typescript</tspan></text>
+<text x="18" y="159" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  → </tspan><tspan fill="#6c7488">:37</tspan><tspan fill="#d6dae4">  </tspan><tspan fill="#c792ea">jb_853fa374</tspan></text>
+<text x="18" y="178" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    * least-recently-used, and because IDs are content-derived, an evicted handle</tspan></text>
+<text x="18" y="197" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  → HandleStore  </tspan><tspan fill="#c792ea">jb_fa7adbb4</tspan><tspan fill="#d6dae4">  </tspan><tspan fill="#6c7488">:60</tspan></text>
+<text x="18" y="216" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    /** Look up a handle, marking it as recently used. */</tspan></text>
+<text x="18" y="235" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#82aaff">test/core.test.ts</tspan><tspan fill="#d6dae4">  4 hits  typescript</tspan></text>
+<text x="18" y="254" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  → </tspan><tspan fill="#6c7488">:160</tspan><tspan fill="#d6dae4">  </tspan><tspan fill="#c792ea">jb_aaf75c6a</tspan></text>
+<text x="18" y="273" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    test('the handle store evicts least-recently-used entries', () =&gt; {</tspan></text>
+<text x="18" y="292" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  → </tspan><tspan fill="#6c7488">:169</tspan><tspan fill="#d6dae4">  </tspan><tspan fill="#c792ea">jb_34b4663f</tspan></text>
+<text x="18" y="311" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    assert.equal(store.get(ids[1]!), undefined, 'the least recently used handle survived');</tspan></text>
+<text x="18" y="330" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  → </tspan><tspan fill="#6c7488">:168</tspan><tspan fill="#d6dae4">  </tspan><tspan fill="#c792ea">jb_16ef0150</tspan></text>
+<text x="18" y="349" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    assert.ok(store.get(ids[0]!), 'a recently used handle was evicted');</tspan></text>
+<text x="18" y="368" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  → </tspan><tspan fill="#6c7488">:70</tspan><tspan fill="#d6dae4">  </tspan><tspan fill="#c792ea">jb_258f1512</tspan></text>
+<text x="18" y="387" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    // The fallback used to be the default expressed in milliseconds, which was</tspan></text>
+<text x="18" y="406" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">scripts/render-svg.mjs  2 hits in 1 place  javascript</tspan></text>
+<text x="18" y="425" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  → shots  </tspan><tspan fill="#c792ea">jb_68bf61f0</tspan><tspan fill="#d6dae4">  </tspan><tspan fill="#6c7488">:170</tspan></text>
+<text x="18" y="444" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    command: 'jb_search {query:&quot;least recently used&quot;}',</tspan></text>
+<text x="18" y="482" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#6c7488">[256/400 tok]</tspan></text>
+<text x="18" y="501" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#7fd1b9" font-weight="bold">next:</tspan><tspan fill="#d6dae4"> jb_read {handle:&quot;jb_…&quot;} to open a hit with full context</tspan></text>
+</svg>
