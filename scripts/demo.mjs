@@ -151,13 +151,29 @@ show(
 
 section('5. jb_define — "where is this actually defined?"', "Follows the importing file's own imports, so it resolves rather than guesses.");
 {
-  const user = ctx.index.all().find((f) => f.imports.some((i) => i.names.length > 0));
-  const ref = user?.imports.find((i) => i.names.length > 0);
-  if (user && ref) {
+  // Pick an import that resolves to a file *in this repository*. An import of
+  // `readFile` from `node:fs` correctly reports "not found", which is right but
+  // demonstrates nothing.
+  let subject;
+  for (const file of ctx.index.all()) {
+    for (const ref of file.imports) {
+      if (ref.names.length === 0) continue;
+      const target = ctx.index.resolveImport(file.path, ref.specifier);
+      if (target && ctx.index.get(target)?.symbols.some((s) => s.name === ref.names[0])) {
+        subject = { from: file.path, name: ref.names[0] };
+        break;
+      }
+    }
+    if (subject) break;
+  }
+
+  if (subject) {
     show(
-      `jb_define {symbol:"${ref.names[0]}", from:"${user.path}"}`,
-      await modules.define.runDefine({ symbol: ref.names[0], from: user.path, tokenBudget: 500 }, ctx),
+      `jb_define {symbol:"${subject.name}", from:"${subject.from}"}`,
+      await modules.define.runDefine({ symbol: subject.name, from: subject.from, tokenBudget: 500 }, ctx),
     );
+  } else {
+    process.stdout.write('\n    No internally-resolvable imports in this repository to demonstrate with.\n');
   }
 }
 
