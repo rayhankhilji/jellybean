@@ -25,6 +25,7 @@ import type { CodeSymbol, ImportRef, LanguageId } from '../lang/types.js';
 import { countCodeTerms, tokenizeCode } from '../util/text.js';
 import { ParseCache, packTerms, unpackTerms } from './cache.js';
 import { WorkspaceWatcher } from './watcher.js';
+import { PackageMap } from './packages.js';
 import { resolveSpecifier, type ResolutionContext } from './resolver.js';
 import { Workspace, type WorkspaceFile } from './workspace.js';
 import type { JellyBeanConfig } from '../config.js';
@@ -89,6 +90,8 @@ export class CodeIndex {
   private scanning: Promise<void> | null = null;
   private readonly cache: ParseCache;
   private readonly watcher: WorkspaceWatcher;
+  /** Package boundaries, so cross-package coupling can be distinguished. */
+  readonly packages = new PackageMap();
 
   constructor(
     private readonly workspace: Workspace,
@@ -204,6 +207,7 @@ export class CodeIndex {
       await Promise.all(batch.map((entry) => this.indexFile(entry, this.files.get(entry.path))));
     }
 
+    await this.packages.discover(this.workspace, [...seen]);
     this.cache.retain(seen);
     this.recomputeStatistics();
     this.rebuildGraph();

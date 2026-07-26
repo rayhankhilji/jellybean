@@ -70,6 +70,8 @@ export async function runMap(args: MapArgs, ctx: ToolContext): Promise<string> {
         prefix ? `under ${prefix}` : null,
         plural(files.length, 'file'),
         `${formatCount(totalLines)} lines`,
+        // A monorepo's package count is the first thing worth knowing about it.
+        ctx.index.packages.isMonorepo ? `${plural(ctx.index.packages.count, 'package')}` : null,
         tally(languages),
       ),
     ),

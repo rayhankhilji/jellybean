@@ -158,7 +158,10 @@ async function renderDependents(
           kind: 'file',
           label: file.path,
         });
-        if (!writer.push(indent(rowIndent, fields(file.path, handle, file.language, category)))) return;
+        const boundary = ctx.index.packages.crossesBoundary(target.file.path, file.path)
+          ? `cross-package → ${ctx.index.packages.owner(file.path)?.name}`
+          : null;
+        if (!writer.push(indent(rowIndent, fields(file.path, handle, file.language, category, boundary)))) return;
         continue;
       }
 
@@ -168,7 +171,10 @@ async function renderDependents(
       const refs = findReferences(text, matcher, file);
       if (refs.length === 0) continue;
 
-      if (!writer.push(indent(rowIndent, fields(file.path, plural(refs.length, 'reference'), category)))) return;
+      const boundary = ctx.index.packages.crossesBoundary(target.file.path, file.path)
+        ? `cross-package → ${ctx.index.packages.owner(file.path)?.name}`
+        : null;
+      if (!writer.push(indent(rowIndent, fields(file.path, plural(refs.length, 'reference'), category, boundary)))) return;
 
       for (const ref of refs.slice(0, MAX_REFS_PER_FILE)) {
         const handle = ctx.handles.mint(
@@ -207,7 +213,10 @@ function renderDependencies(file: FileRecord, ctx: ToolContext, writer: BudgetWr
       kind: 'file',
       label: dependency.path,
     });
-    if (!writer.push(indent(1, fields(dependency.path, handle, dependency.language)))) return;
+    const boundary = ctx.index.packages.crossesBoundary(file.path, dependency.path)
+      ? `cross-package → ${ctx.index.packages.owner(dependency.path)?.name}`
+      : null;
+    if (!writer.push(indent(1, fields(dependency.path, handle, dependency.language, boundary)))) return;
   }
 
   if (file.externals.length > 0) {

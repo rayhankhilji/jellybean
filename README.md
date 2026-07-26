@@ -438,6 +438,29 @@ Stored as plain JSON at `.jellybean/notes.json` inside the workspace, so a human
 can read, edit, review, or commit them. An agent's accumulated understanding of a
 codebase should not be locked in a private store.
 
+## Monorepos
+
+A monorepo is not a flat tree of files, and treating it as one loses the most
+architecturally interesting fact available: which dependencies **cross a package
+boundary**. Inside a package, one file importing another is unremarkable. Across
+packages it is a coupling decision someone made, and the thing a reviewer
+actually wants flagged.
+
+Packages are detected from their own manifests — `package.json`, `Cargo.toml`,
+`go.mod`, `pyproject.toml` — so no configuration is needed. `jb_map` reports the
+count, and `jb_trace` marks the edges that matter:
+
+```
+jb_trace {path:"packages/shared/src/config.ts"}
+
+⇒ depended on by
+  packages/shared/src/local.ts   jb_1a2b3c4d  typescript
+  packages/api/src/server.ts     jb_5e6f7a8b  typescript  cross-package → @acme/api
+```
+
+A repository with a single manifest is deliberately *not* treated as a monorepo.
+Labelling every edge "cross-package" there would be noise on top of being wrong.
+
 ## Resources and prompts
 
 Three resources mirror the cheapest calls, so a client that attaches resources
@@ -527,6 +550,7 @@ src/
     cache.ts            Persistent parse cache, keyed by size and mtime
     watcher.ts          Filesystem watching, so freshness costs nothing
     git.ts              Diff and status parsing for jb_changes
+    packages.ts         Monorepo package boundaries
     tokens.ts           Estimation and budget enforcement
     render.ts           The shared output grammar
     notes.ts            Persistent findings
@@ -566,7 +590,7 @@ name index.
 ```bash
 npm install
 npm run build       # compile to dist/
-npm test            # 138 tests
+npm test            # 144 tests
 npm run typecheck   # no emit
 npm run demo        # guided tour of every tool
 node scripts/benchmark.mjs <repo>   # reproduce the numbers above
