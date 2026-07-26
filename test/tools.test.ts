@@ -25,7 +25,9 @@ import { runRead } from '../src/tools/read.js';
 import { runTrace } from '../src/tools/trace.js';
 import { runDiagnose } from '../src/tools/diagnose.js';
 import { runNotes } from '../src/tools/notes.js';
+import { runChanges } from '../src/tools/changes.js';
 import type { ToolContext } from '../src/tools/context.js';
+import { run } from '../src/diagnostics/runner.js';
 
 const FILES: Record<string, string> = {
   'package.json': JSON.stringify(
@@ -627,5 +629,54 @@ test('the symbol name index tracks renames', async () => {
       0,
       'the old name still resolves after a rename',
     );
+  });
+});
+
+test('jb_changes maps a real edit onto the symbol it touched', async () => {
+  await withWorkspace(async (ctx) => {
+    const git = async (...args: string[]): Promise<void> => {
+      const result = await run(['git', ...args], ctx.workspace.root, 20_000);
+      assert.equal(result.exitCode, 0, `git ${args.join(' ')} failed: ${result.output}`);
+    };
+
+    await git('init', '--quiet');
+    await git('config', 'user.email', 'test@example.com');
+    await git('config', 'user.name', 'Test');
+    await git('add', '-A');
+    await git('commit', '--quiet', '-m', 'initial');
+
+    // Change the body of one method, leaving everything else alone.
+    const storePath = join(ctx.workspace.root, 'src/store.ts');
+    const original = FILES['src/store.ts']!;
+    await writeFile(storePath, original.replace('this.items.set("a", "b");', 'this.items.set("a", "changed");'), 'utf8');
+    await ctx.index.ensureFresh(true);
+
+    const output = await runChanges({}, ctx);
+    assert.ok(output.includes('src/store.ts'), output);
+    assert.ok(output.includes('load'), `the touched method was not identified:\n${output}`);
+    assert.equal(output.includes('createStore'), false, 'an untouched symbol was reported as changed');
+  });
+});
+
+test('jb_changes says so when the tree is clean', async () => {
+  await withWorkspace(async (ctx) => {
+    const git = async (...args: string[]): Promise<void> => {
+      await run(['git', ...args], ctx.workspace.root, 20_000);
+    };
+    await git('init', '--quiet');
+    await git('config', 'user.email', 'test@example.com');
+    await git('config', 'user.name', 'Test');
+    await git('add', '-A');
+    await git('commit', '--quiet', '-m', 'initial');
+
+    const output = await runChanges({}, ctx);
+    assert.ok(output.includes('clean'), output);
+  });
+});
+
+test('jb_changes reports a missing repository rather than failing', async () => {
+  await withWorkspace(async (ctx) => {
+    const output = await runChanges({}, ctx);
+    assert.ok(output.includes('not a git repository'), output);
   });
 });

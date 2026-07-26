@@ -56,13 +56,22 @@ test('the server completes a handshake and advertises its instructions', async (
   }
 });
 
-test('all seven tools are listed with descriptions and schemas', async () => {
+test('all eight tools are listed with descriptions and schemas', async () => {
   const client = await connect();
   try {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
 
-    assert.deepEqual(names, ['jb_diagnose', 'jb_map', 'jb_notes', 'jb_outline', 'jb_read', 'jb_search', 'jb_trace']);
+    assert.deepEqual(names, [
+      'jb_changes',
+      'jb_diagnose',
+      'jb_map',
+      'jb_notes',
+      'jb_outline',
+      'jb_read',
+      'jb_search',
+      'jb_trace',
+    ]);
 
     for (const tool of tools) {
       assert.ok(tool.description && tool.description.length > 40, `${tool.name} has a thin description`);

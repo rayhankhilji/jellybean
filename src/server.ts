@@ -17,6 +17,7 @@ import { readSchema, runRead } from './tools/read.js';
 import { runTrace, traceSchema } from './tools/trace.js';
 import { diagnoseSchema, runDiagnose } from './tools/diagnose.js';
 import { notesSchema, runNotes } from './tools/notes.js';
+import { changesSchema, runChanges } from './tools/changes.js';
 
 export const SERVER_NAME = 'jellybean';
 export const SERVER_VERSION = '1.0.0';
@@ -36,8 +37,9 @@ Work outside-in:
   3. jb_search   — ranked search returning matched lines, not whole files.
   4. jb_read     — read a specific region, usually via a handle from step 1–3.
   5. jb_trace    — what depends on this symbol or file, and what it depends on.
-  6. jb_diagnose — run a project check; get parsed problems instead of a raw log.
-  7. jb_notes    — record and recall findings across sessions.
+  6. jb_changes  — what you changed, by symbol, and what depends on it.
+  7. jb_diagnose — run a project check; get parsed problems instead of a raw log.
+  8. jb_notes    — record and recall findings across sessions.
 
 Handles: results contain ids like jb_3f9a21c4 that address an exact region. Pass one to
 jb_read instead of a path when you can — it is precise and already scoped to the symbol.
@@ -146,6 +148,18 @@ function registerTools(server: McpServer, ctx: ToolContext): void {
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     guard(runDiagnose, ctx),
+  );
+
+  server.registerTool(
+    'jb_changes',
+    {
+      title: 'Review what changed',
+      description:
+        'What have I changed, and what might it break? Maps your uncommitted work — or the whole branch versus its base — onto the symbols it touched, and lists what depends on each. Far cheaper than reading a diff, and it answers the question the diff cannot.',
+      inputSchema: changesSchema,
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    guard(runChanges, ctx),
   );
 
   server.registerTool(

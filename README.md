@@ -4,8 +4,8 @@
 
 **An MCP server that lets coding agents understand a codebase without reading it.**
 
-Repository maps, symbol outlines, ranked search, import tracing, and parsed
-diagnostics — every result under a token budget it actually honours.
+Repository maps, symbol outlines, ranked search, import tracing, change review,
+and parsed diagnostics — every result under a token budget it actually honours.
 
 [![CI](https://github.com/rayhankhilji/jellybean/actions/workflows/ci.yml/badge.svg)](https://github.com/rayhankhilji/jellybean/actions/workflows/ci.yml)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.17-3c873a.svg)](https://nodejs.org)
@@ -67,27 +67,59 @@ rather than by shipping source to the model and hoping.
 
 ## Measured
 
-Real numbers from this repository, using Jelly Bean's own token estimator:
+Benchmarked against three real repositories, on an M-series Mac. Reproduce with
+`node scripts/benchmark.mjs --markdown <repo>` — the harness picks its own
+subject files from whatever repository you point it at, so the numbers are not
+cherry-picked.
 
-| Target | Read in full | `jb_outline` | `jb_read` skeleton |
-|---|---|---|---|
-| `src/lang/outline.ts` | 5,962 | **724** — 88% less | 2,058 — 65% less |
-| `src/core/code-index.ts` | 4,283 | **892** — 79% less | 2,102 — 51% less |
-| `src/tools/search.ts` | 3,989 | **392** — 90% less | 1,384 — 65% less |
-| `src/diagnostics/parsers.ts` | 4,343 | **527** — 88% less | 1,482 — 66% less |
+#### Latency
 
-And for whole-repository orientation — 43 files, 93,671 tokens of source:
+Cold is the first index of a repository. Warm is a restart with the parse cache
+present, which is what a session almost always is. Tool latency is steady-state,
+with the filesystem watcher running.
 
-| Call | Tokens | |
-|---|---|---|
-| Reading every file | 93,671 | — |
-| `jb_map {depth:"symbols"}` | 2,807 | **97% less** |
-| `jb_map {depth:"files"}` | 673 | **99.3% less** |
-| `jb_map {depth:"tree"}` | 164 | **99.8% less** |
+| Repository | Files | Cold index | Warm start | `jb_map` | `jb_outline` | `jb_search` | `jb_trace` |
+|---|---|---|---|---|---|---|---|
+| expressjs/express | 213 | 965ms | 100ms | 21ms | 2ms | 42ms | 4ms |
+| nestjs/nest | 2,124 | 5.3s | 997ms | 22ms | 1ms | 21ms | 3ms |
+| microsoft/vscode | 16,000 | 97s | 13.4s | 116ms | 1ms | 24ms | 4ms |
 
-Reproduce with `npm run build && node dist/index.js --help`, or read
-[`test/tools.test.ts`](test/tools.test.ts), where the budget guarantees are
-asserted rather than asserted-in-prose.
+#### Token cost
+
+The baseline is what an agent without these tools actually pays: reading files to
+orient, and grep-then-read-the-matching-files to find a concept. Both are
+measured, not assumed.
+
+| Repository | Question | Baseline | Jelly Bean | Saved |
+|---|---|---|---|---|
+| express | Orient in the repo | 236,235 — read all 213 files | 749 — `jb_map` tree | **99.7%** |
+| | Rank what matters | 236,235 | 1,864 — `jb_map` files | **99%** |
+| | What is in `lib/utils.js`? | 1,776 — read it | 222 — `jb_outline` | **88%** |
+| | Where is `contentType`? | 110,340 — grep → read 20 files | 1,992 — `jb_search` | **98%** |
+| nest | Orient in the repo | 1,281,435 — read all 2,124 files | 1,875 — `jb_map` tree | **99.9%** |
+| | What is in `core/injector/container.ts`? | 3,350 — read it | 1,213 — `jb_outline` | **64%** |
+| | Where is `ModuleMetatype`? | 56,224 — grep → read 20 files | 1,680 — `jb_search` | **97%** |
+| vscode | Orient in the repo | 66,199,497 — read all 16,000 files | 1,880 — `jb_map` tree | **99.9%** |
+| | What is in `base/common/lifecycle.ts`? | 8,411 — read it | 1,899 — `jb_outline` | **77%** |
+| | Where is `TRACK_DISPOSABLES`? | 110,271 — grep → read 20 files | 1,881 — `jb_search` | **98%** |
+
+The orientation rows look almost too good, so it is worth being precise about
+what they mean: nobody reads 66 million tokens, because nobody can. That is the
+point. Without a map an agent reads *some* arbitrary subset and hopes it picked
+the right one; the comparison is against knowing the whole shape, which is a
+thing you could not previously buy at any price.
+
+#### Honest limits
+
+* **vscode is at the edge.** 16,000 files costs 97 seconds to index cold and
+  ~580MB of heap. Warm start is 13s. Everything after that is fast, but a
+  monorepo of that size is not this design's happy path.
+* **The estimator is ours.** Token counts come from Jelly Bean's own estimator
+  (`src/core/tokens.ts`), which deliberately over-estimates slightly. Absolute
+  figures will differ a few percent from a real BPE tokenizer; the ratios will
+  not.
+* **Search latency depends on the query.** A term appearing in thousands of
+  files costs more than a rare one, because more candidate files get read.
 
 ## Install
 
@@ -151,7 +183,7 @@ node scripts/demo.mjs /path/to/your/repo --check test
 The tour ends by comparing what it printed against the cost of reading the
 repository in full.
 
-## The seven tools
+## The eight tools
 
 ### `jb_map` — orient yourself
 
@@ -340,6 +372,34 @@ dangerous answer when a command has clearly failed.
 
 **It never invokes a shell.** See [Security](#security).
 
+### `jb_changes` — what did I change, and what might it break?
+
+The pre-pull-request question. A diff tells you what you typed; this tells you
+what you *affected*. Changed line ranges are mapped onto the symbols containing
+them, and the import graph supplies what depends on each changed file.
+
+```
+jb_changes {}
+
+jb_changes — uncommitted  3 files  +16/-2
+
+src/server.ts  modified  +16/-2  typescript
+  · INSTRUCTIONS  constant  jb_ea9ca408  :32
+  · registerTools  function  jb_37a42bce  :80
+
+src/core/git.ts  untracked  +155/-0  typescript
+  · isRepository  function  jb_47d7aff7  :34
+  · changedFiles  function  jb_51700abf  :68
+  · parseDiff  function  jb_fa72211c  :98
+    ⇒ used by src/tools/changes.ts
+```
+
+`scope:"branch"` compares the whole branch against its base — `origin/main`,
+`main`, or `master`, whichever exists, or whatever you pass as `base`. Dependents
+are reported per file rather than per symbol, because the import graph records
+which files import which and not which symbol each import was for; claiming
+otherwise would overstate what it knows.
+
 ### `jb_notes` — findings that outlive the session
 
 A conclusion that cost twenty tool calls should be written down, not re-derived.
@@ -441,6 +501,9 @@ src/
     code-index.ts       File records, inverted index, import graph
     resolver.ts         Module specifier → workspace file, per language
     handles.ts          Content-derived region references (LRU)
+    cache.ts            Persistent parse cache, keyed by size and mtime
+    watcher.ts          Filesystem watching, so freshness costs nothing
+    git.ts              Diff and status parsing for jb_changes
     tokens.ts           Estimation and budget enforcement
     render.ts           The shared output grammar
     notes.ts            Persistent findings
@@ -456,20 +519,34 @@ src/
   tools/                One module per tool
 ```
 
-Two properties are worth knowing about the index. It is **incremental**: a rescan
-re-parses only files whose size or mtime changed, so editing one file in a
-5,000-file repository costs one reparse. And search is **two-stage**: BM25 ranks
-files from the inverted index, then only the top files are read to locate lines —
-storing line-level postings would be far larger for no ranking benefit.
+Four properties of the index are worth knowing.
+
+It is **incremental**: a rescan re-parses only files whose size or mtime changed,
+so editing one file in a 5,000-file repository costs one reparse.
+
+It is **watched**, not polled. Staying current by re-walking on a timer means
+every call landing after the timer expires pays for the walk — seconds, at scale.
+The watcher makes "nothing changed" free, and there is a timer fallback for
+platforms where recursive watching is unavailable.
+
+Parses are **cached to disk** under `~/.cache/jellybean`, keyed by size and
+mtime, so a restart does not re-parse the repository. Deliberately outside the
+workspace: notes belong in the repo, a multi-megabyte derived blob does not.
+
+Search is **two-stage**: BM25 ranks files from the inverted index, then only the
+top files are read to locate lines. Storing line-level postings would be far
+larger for no ranking benefit. Exact symbol lookups skip that entirely and hit a
+name index.
 
 ## Development
 
 ```bash
 npm install
 npm run build       # compile to dist/
-npm test            # 116 tests
+npm test            # 132 tests
 npm run typecheck   # no emit
 npm run demo        # guided tour of every tool
+node scripts/benchmark.mjs <repo>   # reproduce the numbers above
 ```
 
 The suite covers the masking scanner (template nesting, regex-versus-division,
