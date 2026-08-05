@@ -32,6 +32,15 @@ export class PathEscapeError extends Error {
 }
 
 export class Workspace {
+  /**
+   * The matcher built by the last full walk, reused for targeted rescans.
+   *
+   * Rebuilding it means reading every nested .gitignore, which means walking —
+   * defeating the point. A change to a .gitignore itself invalidates this, and
+   * the caller forces a full walk in that case.
+   */
+  private lastMatcher: IgnoreMatcher | null = null;
+
   constructor(
     readonly root: string,
     private readonly extraIgnores: readonly string[] = [],
@@ -96,7 +105,56 @@ export class Workspace {
     const files: WorkspaceFile[] = [];
     await this.walkDir('', matcher, files, maxFiles, 0);
     files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    this.lastMatcher = matcher;
     return files;
+  }
+
+  /**
+   * Stat a specific set of paths rather than walking the tree.
+   *
+   * This is what makes a live session cheap: an editor save touches one file,
+   * and the watcher knows which, so there is no reason to stat five thousand
+   * others to discover that.
+   *
+   * Returns `null` when it cannot be done safely — no previous walk to inherit
+   * ignore rules from, or one of the paths is a directory, whose contents we
+   * would have to enumerate anyway.
+   */
+  async statPaths(paths: readonly string[]): Promise<{ present: WorkspaceFile[]; absent: string[] } | null> {
+    const matcher = this.lastMatcher;
+    if (!matcher) return null;
+
+    const present: WorkspaceFile[] = [];
+    const absent: string[] = [];
+
+    const results = await Promise.all(
+      paths.map(async (rel) => {
+        try {
+          const info = await stat(resolvePath(this.root, rel));
+          return { rel, info };
+        } catch {
+          return { rel, info: null };
+        }
+      }),
+    );
+
+    for (const { rel, info } of results) {
+      if (info === null) {
+        // Gone, or never existed. Either way the index should not hold it.
+        absent.push(rel);
+        continue;
+      }
+      // A directory needs enumerating, which is a walk by another name.
+      if (info.isDirectory()) return null;
+      if (!info.isFile()) continue;
+      if (matcher.ignores(rel, false)) {
+        absent.push(rel);
+        continue;
+      }
+      present.push({ path: rel, size: info.size, mtimeMs: info.mtimeMs });
+    }
+
+    return { present, absent };
   }
 
   private async loadGitignore(matcher: IgnoreMatcher, base: string): Promise<void> {

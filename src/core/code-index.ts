@@ -96,9 +96,10 @@ export class CodeIndex {
   constructor(
     private readonly workspace: Workspace,
     private readonly config: JellyBeanConfig,
+    watcher?: WorkspaceWatcher,
   ) {
     this.cache = ParseCache.forWorkspace(workspace.root);
-    this.watcher = new WorkspaceWatcher(workspace.root);
+    this.watcher = watcher ?? new WorkspaceWatcher(workspace.root);
   }
 
   /** How many files the last scan restored from cache rather than parsing. */
@@ -135,18 +136,20 @@ export class CodeIndex {
     if (!force) {
       if (this.watcher.watching) {
         // Authoritative: the watcher has seen every change since the last scan.
-        if (!this.watcher.changed) return;
+        if (!this.watcher.hasChanges) return;
       } else if (Date.now() - this.lastScan < FRESHNESS_MS) {
         return;
       }
     }
     if (this.scanning) return this.scanning;
 
-    // Cleared before the scan, not after: a change arriving mid-scan must leave
-    // the index marked dirty rather than being swallowed by our own completion.
-    this.watcher.clear();
+    // Taken before the scan, not after: a change arriving mid-scan must be
+    // recorded for the next one rather than swallowed by our own completion.
+    // A forced scan ignores the hint and re-walks, because "force" is what a
+    // caller reaches for precisely when it does not trust the watcher.
+    const pending = this.watcher.watching && !force ? this.watcher.take().paths : null;
 
-    this.scanning = this.scan().finally(() => {
+    this.scanning = this.scan(pending).finally(() => {
       this.scanning = null;
       this.lastScan = Date.now();
     });
@@ -163,22 +166,63 @@ export class CodeIndex {
     this.watcher.stop();
   }
 
-  private async scan(): Promise<void> {
+  /**
+   * Bring the index up to date.
+   *
+   * `hint` is the set of paths the watcher saw change. When present, only those
+   * are examined — an editor save costs a handful of `stat` calls rather than a
+   * walk of the entire tree, which is the difference between a live session
+   * feeling instant and feeling broken. When absent, the tree is walked.
+   */
+  private async scan(hint: readonly string[] | null): Promise<void> {
     await this.cache.load(this.workspace.root);
-    const found = await this.workspace.walk(this.config.maxFiles);
-    const seen = new Set<string>();
 
-    const stale: WorkspaceFile[] = [];
-    for (const entry of found) {
-      seen.add(entry.path);
-      const existing = this.files.get(entry.path);
-      if (existing && existing.size === entry.size && existing.mtimeMs === entry.mtimeMs) continue;
-      stale.push(entry);
-    }
+    let stale: WorkspaceFile[] = [];
+    let gone: string[] = [];
+    /** True when the file *set* changed, not merely file contents. */
+    let membershipChanged = false;
+    let seen: Set<string> | null = null;
 
-    const gone: string[] = [];
-    for (const path of this.files.keys()) {
-      if (!seen.has(path)) gone.push(path);
+    // Some files decide what the *rest* of the scan means, and a targeted scan
+    // cannot evaluate them: a .gitignore edit changes which files exist as far
+    // as we are concerned (and the targeted path inherits the last walk's rules,
+    // so it cannot judge itself), and a manifest appearing or vanishing moves a
+    // package boundary, which only `discover` over the full file list can see.
+    const needsFullWalk = hint?.some(decidesScanShape) ?? false;
+    const targeted = hint !== null && hint.length > 0 && !needsFullWalk
+      ? await this.workspace.statPaths(hint)
+      : null;
+
+    if (hint !== null && hint.length === 0) return; // watcher fired, nothing indexable
+
+    if (targeted) {
+      for (const entry of targeted.present) {
+        const existing = this.files.get(entry.path);
+        if (existing && existing.size === entry.size && existing.mtimeMs === entry.mtimeMs) continue;
+        if (!existing) membershipChanged = true;
+        stale.push(entry);
+      }
+      for (const path of targeted.absent) {
+        if (!this.files.has(path)) continue;
+        gone.push(path);
+        membershipChanged = true;
+      }
+    } else {
+      const found = await this.workspace.walk(this.config.maxFiles);
+      seen = new Set<string>();
+      for (const entry of found) {
+        seen.add(entry.path);
+        const existing = this.files.get(entry.path);
+        if (existing && existing.size === entry.size && existing.mtimeMs === entry.mtimeMs) continue;
+        if (!existing) membershipChanged = true;
+        stale.push(entry);
+      }
+      for (const path of this.files.keys()) {
+        if (!seen.has(path)) {
+          gone.push(path);
+          membershipChanged = true;
+        }
+      }
     }
 
     if (stale.length === 0 && gone.length === 0) return;
@@ -207,17 +251,43 @@ export class CodeIndex {
       await Promise.all(batch.map((entry) => this.indexFile(entry, this.files.get(entry.path))));
     }
 
-    await this.packages.discover(this.workspace, [...seen]);
-    this.cache.retain(seen);
+    // Package boundaries and cache pruning both need the full file list, which
+    // only a walk produces. A targeted scan cannot have moved a package boundary,
+    // because a manifest in the hint sends us down the walk path instead.
+    if (seen) {
+      await this.packages.discover(this.workspace, [...seen]);
+      this.cache.retain(seen);
+    } else if (membershipChanged) {
+      for (const path of gone) this.cache.delete(path);
+    }
+
     this.recomputeStatistics();
-    this.rebuildGraph();
+
+    if (membershipChanged) {
+      // A new or deleted file can change edges anywhere: an import that
+      // previously resolved to nothing may now resolve, and vice versa. Only a
+      // full pass can find those.
+      this.rebuildGraph();
+    } else {
+      // Contents changed but the file set did not, so only the edited files'
+      // own outgoing edges can differ. This is the common case in a live
+      // session and rebuilding the whole graph for it is pure waste.
+      this.updateGraphFor(stale.map((entry) => entry.path));
+    }
+
     await this.cache.save(this.workspace.root);
   }
 
   private async indexFile(entry: WorkspaceFile, existing: FileRecord | undefined): Promise<void> {
     // The previous revision's names must go before the new ones arrive, or a
-    // renamed symbol stays findable under both names indefinitely.
-    if (existing) this.removeSymbolNames(existing);
+    // renamed symbol stays findable under both names indefinitely. Its outgoing
+    // edges must go for the same reason, and while it is still in hand: once the
+    // new record is installed, the old dependency list is gone and the importers
+    // it pointed at would keep listing this file forever.
+    if (existing) {
+      this.removeSymbolNames(existing);
+      this.detachOutgoing(existing);
+    }
 
     const language = detectLanguage(entry.path);
     const record: FileRecord = {
@@ -231,7 +301,10 @@ export class CodeIndex {
       imports: [],
       exports: [],
       dependencies: new Set(),
-      dependents: new Set(),
+      // Incoming edges are other files' imports, which editing this file cannot
+      // have changed. Carrying them across is what makes a one-file rescan cost
+      // one file: recomputing them would mean revisiting every importer.
+      dependents: existing?.dependents ?? new Set(),
       externals: [],
       termCount: 0,
       skipped: false,
@@ -315,8 +388,23 @@ export class CodeIndex {
     const record = this.files.get(path);
     if (!record) return;
     this.removeSymbolNames(record);
+    // A deletion always triggers a full graph rebuild, which would clear these
+    // anyway — but leaving edges pointing at a record that no longer exists
+    // means every structure is briefly lying, and something will eventually read
+    // it in that window.
+    this.detachOutgoing(record);
+    for (const index of record.dependents) {
+      this.byIndex[index]?.dependencies.delete(record.index);
+    }
     this.files.delete(path);
     this.byIndex[record.index] = undefined;
+  }
+
+  /** Remove this record from the `dependents` of everything it imports. */
+  private detachOutgoing(record: FileRecord): void {
+    for (const index of record.dependencies) {
+      this.byIndex[index]?.dependents.delete(record.index);
+    }
   }
 
   private addSymbolNames(record: FileRecord): void {
@@ -529,6 +617,36 @@ export class CodeIndex {
   }
 
   /**
+   * Recompute edges for specific files only.
+   *
+   * Valid when the file *set* is unchanged: an edited file's own imports may
+   * differ, but no other file's specifier can have started or stopped
+   * resolving, because nothing appeared or disappeared for it to resolve to.
+   */
+  private updateGraphFor(paths: readonly string[]): void {
+    const ctx = this.resolutionContext();
+
+    for (const path of paths) {
+      const record = this.files.get(path);
+      if (!record) continue;
+
+      // The old outgoing edges were already detached by `indexFile`, which held
+      // the previous revision. This record's dependency set is freshly empty.
+      for (const ref of record.imports) {
+        const targetPath = resolveSpecifier(ref.specifier, record.path, record.language, ctx);
+        if (targetPath === null) {
+          if (!record.externals.includes(ref.specifier)) record.externals.push(ref.specifier);
+          continue;
+        }
+        const target = this.files.get(targetPath);
+        if (!target || target.index === record.index) continue;
+        record.dependencies.add(target.index);
+        target.dependents.add(record.index);
+      }
+    }
+  }
+
+  /**
    * Structural importance of a file, used to order the repository map.
    *
    * Weighted toward being depended upon: in practice the files an agent most
@@ -541,6 +659,16 @@ export class CodeIndex {
     const entrypoint = isEntrypoint(record.path) ? 4 : 0;
     return 3 * Math.log1p(inbound) + 0.5 * Math.log1p(outbound) + 0.3 * Math.log1p(surface) + entrypoint;
   }
+}
+
+/**
+ * Files whose appearance or disappearance changes the meaning of the scan
+ * itself, rather than merely the contents of one record.
+ */
+const SCAN_SHAPING_NAMES = new Set(['.gitignore', 'package.json', 'Cargo.toml', 'go.mod', 'pyproject.toml']);
+
+function decidesScanShape(path: string): boolean {
+  return SCAN_SHAPING_NAMES.has(path.slice(path.lastIndexOf('/') + 1));
 }
 
 function countLines(text: string): number {
