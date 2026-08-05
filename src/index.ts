@@ -81,9 +81,15 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
+  let closing = false;
   const shutdown = (): void => {
-    context.index.stopWatching();
-    void server.close().finally(() => process.exit(0));
+    if (closing) return; // a second Ctrl-C should not race the first
+    closing = true;
+    void (async () => {
+      await context.index.close();
+      await server.close().catch(() => undefined);
+      process.exit(0);
+    })();
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);

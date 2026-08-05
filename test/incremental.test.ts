@@ -15,13 +15,14 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from '../src/config.js';
 import { CodeIndex } from '../src/core/code-index.js';
 import { Workspace } from '../src/core/workspace.js';
 import { WorkspaceWatcher, type PendingChanges } from '../src/core/watcher.js';
+import { ParseCache } from '../src/core/cache.js';
 
 /**
  * A watcher whose reports the test dictates.
@@ -298,6 +299,25 @@ test('an ignored file appearing in a report is not indexed', async () => {
     await f.index.ensureFresh();
 
     assert.equal(f.index.get('generated/extra.ts'), undefined);
+  });
+});
+
+test('a rescan does not rewrite the whole cache, and shutdown does not lose it', async () => {
+  await withFixture(async (f) => {
+    const cachePath = ParseCache.forWorkspace(f.root).path;
+    const written = async (): Promise<string> => readFile(cachePath, 'utf8');
+    assert.ok((await written()).length > 0, 'the first scan should have written the cache straight away');
+
+    await f.write('src/store.ts', 'export function beaconSymbol(): void {}\n');
+    f.watcher.report(['src/store.ts']);
+    await f.index.ensureFresh();
+
+    // Serialising a few megabytes of JSON per keystroke costs more than the
+    // rescan it is recording.
+    assert.equal((await written()).includes('beaconSymbol'), false, 'a one-file rescan rewrote the entire cache');
+
+    await f.index.close();
+    assert.ok((await written()).includes('beaconSymbol'), 'shutdown dropped the pending cache write');
   });
 });
 

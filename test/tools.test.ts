@@ -755,7 +755,7 @@ test('a cache written by an older parser generation is not trusted', async () =>
     // parser improvement and every existing cache confidently serving the old
     // answer, so verify that a mismatched generation is discarded outright.
     const cache = ParseCache.forWorkspace(ctx.workspace.root);
-    await cache.load(ctx.workspace.root);
+    await cache.load();
     assert.ok(cache.size > 0, 'the first index should have written a cache');
 
     const raw = JSON.parse(await readFile(cache.path, 'utf8')) as { version: number };
@@ -763,7 +763,7 @@ test('a cache written by an older parser generation is not trusted', async () =>
     await writeFile(cache.path, JSON.stringify({ ...raw, version: raw.version - 1 }), 'utf8');
 
     const stale = ParseCache.forWorkspace(ctx.workspace.root);
-    await stale.load(ctx.workspace.root);
+    await stale.load();
     assert.equal(stale.size, 0, 'a cache from a different generation was accepted');
 
     // And the index still works, by re-parsing.

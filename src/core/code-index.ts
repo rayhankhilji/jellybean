@@ -87,6 +87,7 @@ export class CodeIndex {
   private nextIndex = 0;
 
   private lastScan = 0;
+  private hasScanned = false;
   private scanning: Promise<void> | null = null;
   private readonly cache: ParseCache;
   private readonly watcher: WorkspaceWatcher;
@@ -167,6 +168,18 @@ export class CodeIndex {
   }
 
   /**
+   * Shut down cleanly: stop watching and make the cache durable.
+   *
+   * Cache writes are debounced, so one is very often still pending when the
+   * server is asked to exit. Skipping this loses it, and the next start
+   * re-parses the whole repository to learn what it already knew.
+   */
+  async close(): Promise<void> {
+    this.watcher.stop();
+    await this.cache.flush();
+  }
+
+  /**
    * Bring the index up to date.
    *
    * `hint` is the set of paths the watcher saw change. When present, only those
@@ -175,7 +188,7 @@ export class CodeIndex {
    * feeling instant and feeling broken. When absent, the tree is walked.
    */
   private async scan(hint: readonly string[] | null): Promise<void> {
-    await this.cache.load(this.workspace.root);
+    await this.cache.load();
 
     let stale: WorkspaceFile[] = [];
     let gone: string[] = [];
@@ -275,7 +288,13 @@ export class CodeIndex {
       this.updateGraphFor(stale.map((entry) => entry.path));
     }
 
-    await this.cache.save(this.workspace.root);
+    // The first scan is the one worth writing straight away: it parsed the whole
+    // repository, and if the process dies before a debounced write lands, the
+    // next start does all of it again. Later scans reparse a handful of files,
+    // so coalescing their writes costs nothing worth having.
+    if (this.hasScanned) this.cache.scheduleSave();
+    else await this.cache.flush();
+    this.hasScanned = true;
   }
 
   private async indexFile(entry: WorkspaceFile, existing: FileRecord | undefined): Promise<void> {

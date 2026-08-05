@@ -65,18 +65,33 @@ interface CacheFile {
   files: Record<string, CachedFile>;
 }
 
+/**
+ * How long writes are coalesced.
+ *
+ * The cache is one document — a few megabytes on a large repository — so it is
+ * rewritten whole every time. Doing that on every keystroke-triggered rescan
+ * costs more than the rescan itself, and the only thing lost by waiting is a
+ * little re-parsing after a crash.
+ */
+const SAVE_DEBOUNCE_MS = 2_000;
+
 export class ParseCache {
   private entries = new Map<string, CachedFile>();
   private dirty = false;
   private loaded = false;
+  private timer: NodeJS.Timeout | null = null;
+  private writing: Promise<void> | null = null;
 
-  private constructor(private readonly file: string) {}
+  private constructor(
+    private readonly file: string,
+    private readonly root: string,
+  ) {}
 
   /** Locate the cache for a workspace. The root path is hashed, not embedded. */
   static forWorkspace(root: string): ParseCache {
     const base = process.env['XDG_CACHE_HOME'] ?? join(homedir(), '.cache');
     const key = createHash('sha1').update(root).digest('hex').slice(0, 16);
-    return new ParseCache(join(base, 'jellybean', `${key}.json`));
+    return new ParseCache(join(base, 'jellybean', `${key}.json`), root);
   }
 
   /** Where the cache is stored, for diagnostics. */
@@ -93,13 +108,13 @@ export class ParseCache {
    * wrong root — yields an empty cache rather than an error: a stale cache must
    * never be able to break indexing, only fail to accelerate it.
    */
-  async load(root: string): Promise<void> {
+  async load(): Promise<void> {
     if (this.loaded) return;
     this.loaded = true;
     try {
       const raw = await readFile(this.file, 'utf8');
       const parsed = JSON.parse(raw) as Partial<CacheFile>;
-      if (parsed.version !== CACHE_VERSION || parsed.root !== root || !parsed.files) return;
+      if (parsed.version !== CACHE_VERSION || parsed.root !== this.root || !parsed.files) return;
       this.entries = new Map(Object.entries(parsed.files));
     } catch {
       this.entries = new Map();
@@ -132,12 +147,44 @@ export class ParseCache {
     }
   }
 
-  /** Write atomically, and only when something changed. */
-  async save(root: string): Promise<void> {
-    if (!this.dirty) return;
-    this.dirty = false;
+  /**
+   * Ask for the cache to be written soon, and return immediately.
+   *
+   * Scans call this, so a rescan's cost is the rescan. The timer is unref'd —
+   * a pending write must never be the reason the process stays alive — which is
+   * why shutdown calls `flush`.
+   */
+  scheduleSave(): void {
+    if (!this.dirty || this.timer) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.flush();
+    }, SAVE_DEBOUNCE_MS);
+    this.timer.unref?.();
+  }
 
-    const payload: CacheFile = { version: CACHE_VERSION, root, files: Object.fromEntries(this.entries) };
+  /** Write now, waiting for any write already in flight. Safe to call at any time. */
+  async flush(): Promise<void> {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    // A write in flight was serialised from an older snapshot. Let it land
+    // rather than racing it — two renames onto the same path in either order is
+    // how a cache ends up older than the one it replaced.
+    if (this.writing) await this.writing;
+    if (!this.dirty) return;
+
+    this.writing = this.write().finally(() => {
+      this.writing = null;
+    });
+    await this.writing;
+  }
+
+  /** Write atomically. Marks clean first, so changes arriving mid-write are not lost. */
+  private async write(): Promise<void> {
+    this.dirty = false;
+    const payload: CacheFile = { version: CACHE_VERSION, root: this.root, files: Object.fromEntries(this.entries) };
     try {
       await mkdir(dirname(this.file), { recursive: true });
       const temporary = `${this.file}.${process.pid}.tmp`;
