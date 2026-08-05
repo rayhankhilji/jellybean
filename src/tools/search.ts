@@ -60,6 +60,23 @@ type SearchArgs = {
 const CANDIDATE_FILES = 60;
 /** Hits shown per file before we assume the rest are more of the same. */
 const MAX_HITS_PER_FILE = 6;
+/**
+ * Candidate files read at once.
+ *
+ * Reading is almost all of what a search costs — on Nest, 2,123 files take
+ * 1,389ms one at a time and 290ms in parallel, while running the regex over all
+ * of them takes 23ms. Waiting on one `open` at a time is the entire problem.
+ */
+const READ_CONCURRENCY = 24;
+/**
+ * Ceiling on files read in regex mode, which has no ranking to narrow by.
+ *
+ * A pattern matching nothing would otherwise read the whole repository before
+ * saying so. When the ceiling is reached the answer says which files were
+ * covered, because a truncated search that looks complete is worse than a slow
+ * one.
+ */
+const MAX_REGEX_FILES = 2500;
 
 interface Hit {
   line: number;
@@ -91,9 +108,10 @@ export async function runSearch(args: SearchArgs, ctx: ToolContext): Promise<str
     return `jb_search — invalid regular expression: ${(error as Error).message}`;
   }
 
+  const eligible = mode === 'regex' ? ctx.index.all().filter(accepts) : null;
   const candidates =
-    mode === 'regex'
-      ? ctx.index.all().filter(accepts)
+    eligible !== null
+      ? eligible.slice(0, MAX_REGEX_FILES)
       : ctx.index
           .searchFiles(args.query, CANDIDATE_FILES * 3)
           .map((hit) => hit.file)
@@ -110,50 +128,70 @@ export async function runSearch(args: SearchArgs, ctx: ToolContext): Promise<str
   let totalHits = 0;
   let filesScanned = 0;
 
-  for (const file of candidates) {
-    if (filesShown >= maxFiles) break;
+  // Read a batch at a time and report it in candidate order, so results stay
+  // deterministic while the waiting overlaps. Ordering matters: it is what makes
+  // a search reproducible between runs, and reproducible between an agent's
+  // first attempt and its follow-up.
+  let stop = false;
+  for (let start = 0; start < candidates.length && !stop && filesShown < maxFiles; start += READ_CONCURRENCY) {
+    const batch = candidates.slice(start, start + READ_CONCURRENCY);
+    const texts = await Promise.all(batch.map((file) => ctx.workspace.readText(file.path, ctx.config.maxFileBytes)));
 
-    const text = await ctx.workspace.readText(file.path, ctx.config.maxFileBytes);
-    if (text === null) continue;
-    filesScanned++;
+    for (const [offset, file] of batch.entries()) {
+      if (filesShown >= maxFiles) break;
+      const text = texts[offset];
+      if (text === null || text === undefined) continue;
+      filesScanned++;
 
-    const hits = findHits(text, matcher, file);
-    if (hits.length === 0) continue;
+      const hits = findHits(text, matcher, file);
+      if (hits.length === 0) continue;
 
-    filesShown++;
-    totalHits += hits.length;
+      filesShown++;
+      totalHits += hits.length;
 
-    // Collapse hits that share an enclosing symbol: six matches inside one
-    // function are one place to look, and repeating its handle six times is
-    // pure waste. The best-scoring line stands in for the rest.
-    const places = dedupeBySymbol(hits);
-    const shown = places.slice(0, MAX_HITS_PER_FILE);
+      // Collapse hits that share an enclosing symbol: six matches inside one
+      // function are one place to look, and repeating its handle six times is
+      // pure waste. The best-scoring line stands in for the rest.
+      const places = dedupeBySymbol(hits);
+      const shown = places.slice(0, MAX_HITS_PER_FILE);
 
-    // Report both counts. After collapsing, "23 hits" alone would overstate how
-    // much there is to look at, and the omitted count has to be in the same
-    // unit as the rows beneath it or it reads as a lie.
-    const summary =
-      places.length === hits.length
-        ? plural(hits.length, 'hit')
-        : `${plural(hits.length, 'hit')} in ${plural(places.length, 'place')}`;
-    if (!writer.push(fields(file.path, summary, file.language))) break;
-
-    let exhausted = false;
-    for (const hit of shown) {
-      if (!renderHit(hit, file, ctx, writer, contextLines, text)) {
-        exhausted = true;
+      // Report both counts. After collapsing, "23 hits" alone would overstate how
+      // much there is to look at, and the omitted count has to be in the same
+      // unit as the rows beneath it or it reads as a lie.
+      const summary =
+        places.length === hits.length
+          ? plural(hits.length, 'hit')
+          : `${plural(hits.length, 'hit')} in ${plural(places.length, 'place')}`;
+      if (!writer.push(fields(file.path, summary, file.language))) {
+        stop = true;
         break;
       }
-    }
-    if (exhausted) break;
-    if (places.length > shown.length) {
-      writer.push(indent(1, `… ${places.length - shown.length} more in this file`));
+
+      for (const hit of shown) {
+        if (!renderHit(hit, file, ctx, writer, contextLines, text)) {
+          stop = true;
+          break;
+        }
+      }
+      if (stop) break;
+      if (places.length > shown.length) {
+        writer.push(indent(1, `… ${places.length - shown.length} more in this file`));
+      }
     }
   }
 
   if (filesShown === 0) {
     writer.pushUnchecked(
       `no matches${filesScanned > 0 ? ` in ${plural(filesScanned, 'candidate file')}` : ''}. Try mode:"symbol" for declaration names, or a broader query.`,
+    );
+  }
+
+  // A regex search that quietly stopped short would read as "there is nothing
+  // else", which is the one thing it must not imply.
+  if (eligible !== null && eligible.length > candidates.length) {
+    writer.pushUnchecked('');
+    writer.pushUnchecked(
+      `covered the first ${candidates.length} of ${eligible.length} files, in path order. Narrow with path: or language: to reach the rest.`,
     );
   }
 

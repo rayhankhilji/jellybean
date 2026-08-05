@@ -256,6 +256,26 @@ test('jb_search reports an invalid regex instead of throwing', async () => {
   });
 });
 
+test('jb_search keeps path order when results span several read batches', async () => {
+  await withWorkspace(async (ctx) => {
+    // Candidate files are read concurrently in batches. Reporting them in
+    // completion order instead of candidate order would make the same search
+    // return a different answer each run, which is worse than a slow search.
+    await mkdir(join(ctx.workspace.root, 'src/gen'), { recursive: true });
+    for (let i = 0; i < 60; i++) {
+      const name = `mod${String(i).padStart(2, '0')}.ts`;
+      await writeFile(join(ctx.workspace.root, 'src/gen', name), `export const NEEDLE_${i} = ${i};\n`, 'utf8');
+    }
+    await ctx.index.ensureFresh(true);
+
+    const output = await runSearch({ query: 'NEEDLE_\\d+', mode: 'regex', maxFiles: 50 }, ctx);
+    const reported = [...output.matchAll(/^src\/gen\/mod\d+\.ts/gm)].map((m) => m[0]);
+
+    assert.ok(reported.length >= 30, `expected many files, got ${reported.length}:\n${output}`);
+    assert.deepEqual(reported, [...reported].sort(), 'concurrent reads reordered the results');
+  });
+});
+
 test('jb_search says so when there are no matches', async () => {
   await withWorkspace(async (ctx) => {
     const output = await runSearch({ query: 'quetzalcoatlus' }, ctx);
