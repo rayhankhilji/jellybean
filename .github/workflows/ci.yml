@@ -45,16 +45,15 @@ jobs:
             | grep -q '"serverInfo"'
           echo "handshake ok"
 
-      - name: Verify --doctor reports a healthy setup and changes nothing
+      - name: Verify --doctor reports a healthy setup
         shell: bash
         run: |
-          node dist/index.js --doctor .
           # The doctor is what people are told to run when something is wrong, so
-          # it has to work on every platform — including the one where file
-          # watching behaves differently.
-          test -z "$(git status --porcelain)" || {
-            echo "--doctor modified the working tree:"; git status --porcelain; exit 1;
-          }
+          # it has to work on every platform — including the ones where file
+          # watching behaves differently. That it creates nothing is covered by
+          # test/doctor.test.ts, which can assert it without tripping over
+          # per-platform line-ending noise in `git status`.
+          node dist/index.js --doctor .
 
       - name: Verify the published package installs and runs
         shell: bash
