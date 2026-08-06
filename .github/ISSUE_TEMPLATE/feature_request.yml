@@ -1,0 +1,37 @@
+name: Feature request
+description: Something Jelly Bean should be able to do and cannot.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The bar for a new tool is high: every tool is described to the model on
+        every connection, so each one makes the others slightly harder to choose
+        between. A request that makes an existing tool answer a question it
+        nearly answers already is more likely to land than a tenth tool.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you were trying to find out
+      description: |
+        The question you were asking about the code, not the feature you have in
+        mind. "Which handlers can reach the database" is more useful here than
+        "add a transitive dependency filter", because there may be a cheaper way
+        to answer it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: How you do it today
+      description: Which tool calls you make now, and what is wrong with them — too many calls, too many tokens, or an answer you cannot trust.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like instead
+      description: If you have a specific shape in mind, describe the call and the output you would want back.

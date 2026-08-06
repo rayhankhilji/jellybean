@@ -1,0 +1,51 @@
+name: Wrong or missing symbols
+description: An outline, search, or definition lookup got the code wrong.
+labels: [bug, parsing]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Jelly Bean reads code with regexes and a masking pass rather than a real
+        parser for each language. That is a deliberate trade — it is why there is
+        no build step and no native dependency — and it is also where nearly all
+        of its wrongness lives. These reports are the most useful kind, because
+        each one is a concrete case the extraction rules do not yet handle.
+
+        **If you have changed the parsing yourself and are testing it:** bump
+        `CACHE_VERSION` in `src/core/cache.ts`. The cache is keyed by
+        (path, size, mtime) and cannot notice that our own code changed, so
+        without a bump you will keep seeing the old answer.
+
+  - type: textarea
+    id: snippet
+    attributes:
+      label: The code
+      description: The smallest snippet that shows the problem. Please include enough surrounding lines for the structure to be visible.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      placeholder: rust, python, typescript…
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What the outline should say
+      description: 'Which declarations, with which kinds and visibility. For example: `Config` as a public struct, `new` as a public method on it.'
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What it says instead
+      description: Paste the `jb_outline` output for the file, or note that the symbol is missing entirely.
+      render: text
+    validations:
+      required: true

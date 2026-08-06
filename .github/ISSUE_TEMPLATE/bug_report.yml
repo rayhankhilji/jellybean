@@ -1,0 +1,74 @@
+name: Bug report
+description: Something behaves differently from how it is documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before anything else, please run `jellybean --doctor` in the workspace
+        where the problem happens and paste the output below. It answers most of
+        what would otherwise be the first three replies on this issue — which
+        root was resolved, whether file watching works there, how large the
+        index is, and what `jb_diagnose` is permitted to run.
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: '`jellybean --doctor` output'
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What should have happened, and where you got that expectation from.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: |
+        The tool call and its arguments, and the output you got. If the answer
+        was wrong rather than absent, the wrong answer itself is the most useful
+        thing you can paste.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce it
+      description: |
+        A public repository and the exact tool call is ideal. Failing that,
+        describe the shape of the code — a barrel file, a monorepo with three
+        packages, a file with a 400-line function — because that is usually what
+        the bug actually depends on.
+
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      placeholder: Claude Code 2.1.4, Cursor, custom SDK client…
+    validations:
+      required: true
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language of the affected code
+      options:
+        - TypeScript / JavaScript
+        - Python
+        - Go
+        - Rust
+        - Java / Kotlin
+        - C / C++
+        - Ruby
+        - PHP
+        - Other or several
+    validations:
+      required: true

@@ -502,7 +502,10 @@ re-verify).
   ones and negation, alongside a built-in list of directories never worth
   indexing. Binary files are detected and skipped.
 
-Jelly Bean does no network I/O and writes exactly one file: the notes store.
+Jelly Bean does no network I/O. It writes one file inside the workspace — the
+notes store, and only when `jb_notes` is asked to save something — and a parse
+cache outside it, under `~/.cache/jellybean/`. `jellybean --doctor` prints both
+paths. [SECURITY.md](SECURITY.md) has the full picture, including the limits.
 
 ## Configuration
 

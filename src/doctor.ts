@@ -286,7 +286,7 @@ async function checkDiagnostics(workspace: Workspace, config: JellyBeanConfig): 
     findings.push({
       level: 'ok',
       label: 'jb_diagnose',
-      detail: `${checks.length} checks: ${checks.map((c) => c.name).join(', ')}`,
+      detail: `${plural(checks.length, 'check')}: ${checks.map((c) => c.name).join(', ')}`,
     });
   }
 

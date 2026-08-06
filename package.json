@@ -12,8 +12,18 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
     "LICENSE"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rayhankhilji/jellybean.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rayhankhilji/jellybean/issues"
+  },
+  "homepage": "https://github.com/rayhankhilji/jellybean#readme",
   "engines": {
     "node": ">=18.17"
   },
@@ -27,7 +37,8 @@
     "test": "node scripts/run-tests.mjs",
     "pretest": "tsc -p tsconfig.test.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "clean": "rm -rf dist dist-test"
+    "clean": "node scripts/clean.mjs",
+    "prepublishOnly": "npm run clean && npm run build && npm test"
   },
   "keywords": [
     "mcp",
