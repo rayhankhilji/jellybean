@@ -36,7 +36,11 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-const child = spawn(process.execPath, ['--test', ...files], { stdio: 'inherit', cwd: root });
+// `--expose-gc` is for one test: that the index does not retain the source text
+// it was built from. There is no way to observe retention without being able to
+// collect first, and that regression is invisible until someone points the
+// server at a repository large enough for it to matter.
+const child = spawn(process.execPath, ['--expose-gc', '--test', ...files], { stdio: 'inherit', cwd: root });
 child.on('error', (error) => {
   process.stderr.write(`Failed to launch the test runner: ${error.message}\n`);
   process.exit(1);

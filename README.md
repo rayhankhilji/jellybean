@@ -84,7 +84,7 @@ with the filesystem watcher running.
 |---|---|---|---|---|---|---|---|
 | expressjs/express | 213 | 475ms | 42ms | 8ms | 1ms | 15ms | 5ms |
 | nestjs/nest | 2,125 | 2.3s | 509ms | 22ms | 2ms | 12ms | 10ms |
-| microsoft/vscode | 16,494 | 66s | 8.5s | 77ms | 10ms | 27ms | 5ms |
+| microsoft/vscode | 16,494 | 66s | 10s | 77ms | 10ms | 27ms | 5ms |
 
 The number that decides how a session *feels* is none of those, though — it is
 what an editor save costs, because that is what happens between one tool call
@@ -92,10 +92,11 @@ and the next. The watcher reports which paths changed, so a rescan stats those
 rather than walking the tree, and only the edited files' graph edges are
 recomputed:
 
-| Repository | One file saved → index up to date |
-|---|---|
-| expressjs/express | 2–5ms |
-| nestjs/nest | 7–16ms |
+| Repository | One file saved → index up to date | Retained heap |
+|---|---|---|
+| expressjs/express | 2–5ms | 7MB |
+| nestjs/nest | 7–16ms | 18MB |
+| microsoft/vscode | — | 316MB |
 
 #### Token cost
 
@@ -124,13 +125,12 @@ thing you could not previously buy at any price.
 
 #### Honest limits
 
-* **vscode is at the edge, and memory is why.** 16,494 files costs 66 seconds to
-  index cold — call it 60–80s, it varies with what else the machine is doing —
-  8.5 seconds to start warm, and **914MB of retained heap**. Every tool call
-  after that is fast, and a session pays the cold cost once. But 914MB is a lot
-  to ask of a machine that is also running an editor and a language server, and
-  the honest recommendation at that size is to point the root at the subtree you
-  are actually working in. express and nest retain 10MB and 37MB.
+* **vscode is at the edge.** 16,494 files costs 66 seconds to index cold — call
+  it 60–80s, it varies with what else the machine is doing — 10 seconds to start
+  warm, and 316MB of retained heap. Every tool call after that is fast, and a
+  session pays the cold cost once. But a repository of that size is not this
+  design's happy path, and the honest recommendation is to point the root at the
+  subtree you are actually working in. express and nest retain 7MB and 18MB.
 
   The wait is at least visible rather than silent: the server connects before it
   starts indexing, so the handshake completes in about half a second and all nine

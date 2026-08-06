@@ -22,7 +22,7 @@ import { extractSymbols } from '../lang/outline.js';
 import { detectLanguage, isStructured, syntaxFor } from '../lang/registry.js';
 import { maskSource } from '../lang/scanner.js';
 import type { CodeSymbol, ImportRef, LanguageId } from '../lang/types.js';
-import { countCodeTerms, tokenizeCode } from '../util/text.js';
+import { countCodeTerms, detachString, tokenizeCode } from '../util/text.js';
 import { ParseCache, packTerms, unpackTerms } from './cache.js';
 import { WorkspaceWatcher } from './watcher.js';
 import { PackageMap } from './packages.js';
@@ -387,6 +387,12 @@ export class CodeIndex {
         }
       }
       record.exports = collectExports(record.symbols, text, language);
+
+      // Everything above was cut out of `text` and, in V8, is still pointing at
+      // it. Keeping any of it keeps the whole file. This is the one place that
+      // decides what the index retains, so it is the one place that has to cut
+      // the cord — before the terms are counted, so their keys are detached too.
+      detachParse(record);
       frequencies = this.countTerms(record, text);
       this.applyTerms(record, frequencies);
     }
@@ -516,7 +522,11 @@ export class CodeIndex {
       const current = frequencies.get(term);
       if (current === undefined) {
         if (frequencies.size >= MAX_TERMS_PER_FILE) return;
-        frequencies.set(term, 1);
+        // A term that turns out to be new becomes a key in the global postings
+        // table and is kept for the life of the server, so it must not stay a
+        // pointer into this file's text. Terms already seen are looked up, not
+        // stored, so they cost nothing.
+        frequencies.set(detachString(term), 1);
       } else {
         frequencies.set(term, current + 1);
       }
@@ -697,6 +707,24 @@ export class CodeIndex {
     const entrypoint = isEntrypoint(record.path) ? 4 : 0;
     return 3 * Math.log1p(inbound) + 0.5 * Math.log1p(outbound) + 0.3 * Math.log1p(surface) + entrypoint;
   }
+}
+
+/**
+ * Cut every string in a freshly parsed record loose from the source it came out
+ * of. See `detachString` — without this the index holds the whole repository's
+ * text, not a description of it.
+ */
+function detachParse(record: FileRecord): void {
+  for (const symbol of record.symbols) {
+    symbol.name = detachString(symbol.name);
+    symbol.signature = detachString(symbol.signature);
+    if (symbol.doc !== undefined) symbol.doc = detachString(symbol.doc);
+  }
+  for (const ref of record.imports) {
+    ref.specifier = detachString(ref.specifier);
+    ref.names = ref.names.map(detachString);
+  }
+  record.exports = record.exports.map(detachString);
 }
 
 /**

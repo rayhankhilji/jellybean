@@ -23,6 +23,31 @@ export function splitIdentifier(identifier: string): string[] {
  * Emits both the whole identifier and its sub-words, so `getUserName` is
  * findable as `getusername`, `get`, `user`, and `name`.
  */
+/**
+ * Below this length V8 copies a substring outright; at or above it, it does not.
+ * The exact threshold is an implementation detail, so this is only ever used to
+ * skip work that would be pointless, never to decide correctness.
+ */
+const MIN_SLICED_LENGTH = 13;
+
+/**
+ * A copy of `text` that does not retain whatever it was cut out of.
+ *
+ * V8 represents a substring as a pointer into its parent rather than a copy, so
+ * a thirty-character import specifier extracted from a forty-kilobyte source
+ * file keeps that entire file alive for as long as the specifier is held. The
+ * index holds hundreds of thousands of such fragments, which is how a repository
+ * whose text is 400MB ends up costing 900MB of heap to describe.
+ *
+ * The round trip through UTF-16 bytes is the cheapest exact copy available:
+ * cheaper than JSON, and unlike UTF-8 it survives an unpaired surrogate — which
+ * can appear in source and must not be silently rewritten.
+ */
+export function detachString(text: string): string {
+  if (text.length < MIN_SLICED_LENGTH) return text;
+  return Buffer.from(text, 'utf16le').toString('utf16le');
+}
+
 export function tokenizeCode(text: string): string[] {
   const out: string[] = [];
   countCodeTerms(text, (term) => {
