@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -48,6 +49,11 @@ test('the server completes a handshake and advertises its instructions', async (
   try {
     const info = client.getServerVersion();
     assert.equal(info?.name, 'jellybean');
+
+    // The version a client is told is the one a bug report is filed against, so
+    // it has to be the published one and not a constant that drifted from it.
+    const manifest = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8')) as { version: string };
+    assert.equal(info?.version, manifest.version);
 
     const instructions = client.getInstructions();
     assert.ok(instructions && instructions.includes('jb_map'), 'no usage instructions were sent');

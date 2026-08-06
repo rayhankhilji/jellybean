@@ -55,8 +55,8 @@ const DEFAULTS: Omit<JellyBeanConfig, 'root'> = {
 
 export interface ParsedArgs {
   config: JellyBeanConfig;
-  /** Set when the caller asked for `--help` or `--version`. */
-  action?: 'help' | 'version';
+  /** Set when the caller asked for something other than starting the server. */
+  action?: 'help' | 'version' | 'doctor';
 }
 
 /**
@@ -78,6 +78,8 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = proc
     allowArbitraryCommands: env['JELLYBEAN_UNSAFE_COMMANDS'] === '1',
   };
 
+  let action: ParsedArgs['action'];
+
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const next = (): string => {
@@ -93,6 +95,11 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = proc
       case '--version':
       case '-v':
         return { config, action: 'version' };
+      case '--doctor':
+        // Not returned immediately: the flag can come before the path, and the
+        // whole point is to report on the root the server would actually use.
+        action = 'doctor';
+        break;
       case '--root':
       case '-r':
         config.root = next();
@@ -128,7 +135,7 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = proc
 
   config.root = resolve(config.root);
   config.defaultTokenBudget = Math.min(config.defaultTokenBudget, config.maxTokenBudget);
-  return { config };
+  return action ? { config, action } : { config };
 }
 
 function intFrom(value: string | undefined, fallback: number): number {

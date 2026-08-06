@@ -19,9 +19,10 @@ import { diagnoseSchema, runDiagnose } from './tools/diagnose.js';
 import { notesSchema, runNotes } from './tools/notes.js';
 import { changesSchema, runChanges } from './tools/changes.js';
 import { defineSchema, runDefine } from './tools/define.js';
+import { SERVER_VERSION } from './version.js';
 
 export const SERVER_NAME = 'jellybean';
-export const SERVER_VERSION = '1.0.0';
+export { SERVER_VERSION };
 
 /**
  * Guidance sent to the client at initialization.

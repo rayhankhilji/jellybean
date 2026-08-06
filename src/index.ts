@@ -11,6 +11,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { parseArgs, type JellyBeanConfig } from './config.js';
 import { createServer, SERVER_NAME, SERVER_VERSION } from './server.js';
+import { runDoctor } from './doctor.js';
 
 const USAGE = `jellybean — a token-frugal MCP server for understanding codebases
 
@@ -29,6 +30,7 @@ OPTIONS
       --allow-command <c>  Permit jb_diagnose to run this command. Repeatable.
       --unsafe-commands    Permit jb_diagnose to run any command. Off by default.
       --command-timeout <s> Seconds before a check is killed (default 120).
+      --doctor             Check the setup and exit, without starting the server.
   -h, --help               Show this message.
   -v, --version            Print the version.
 
@@ -54,6 +56,12 @@ async function main(): Promise<void> {
     }
     if (parsed.action === 'version') {
       process.stderr.write(`${SERVER_NAME} ${SERVER_VERSION}\n`);
+      return;
+    }
+    if (parsed.action === 'doctor') {
+      // A person is reading this, not a protocol — stdout is the right place,
+      // and no transport is ever connected to compete for it.
+      process.exitCode = await runDoctor(parsed.config, process.stdout);
       return;
     }
     config = parsed.config;

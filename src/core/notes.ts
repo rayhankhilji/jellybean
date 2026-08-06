@@ -42,6 +42,11 @@ export class NotesStore {
     return new NotesStore(resolve(root, relativePath));
   }
 
+  /** Where notes are stored, for diagnostics. */
+  get path(): string {
+    return this.absolutePath;
+  }
+
   private async load(): Promise<Note[]> {
     if (this.notes) return this.notes;
     try {
