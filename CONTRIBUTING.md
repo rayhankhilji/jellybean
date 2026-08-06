@@ -19,6 +19,16 @@ To try your changes against a real repository:
 node dist/index.js /path/to/some/repo
 ```
 
+If it does not behave, check the setup before the code:
+
+```bash
+node dist/index.js --doctor /path/to/some/repo
+```
+
+It reports the resolved root, how many files that indexes, whether file watching
+works on your platform, and which commands `jb_diagnose` is allowed to run —
+which is usually the answer.
+
 ## Adding a language
 
 This is the most common contribution and it is usually three small edits:
@@ -83,3 +93,10 @@ loud as it is.
 - Add a test for behaviour you change. The suite is fast — there is no reason not
   to.
 - One concern per PR, please.
+- Performance claims need a number and the repository it came from.
+  `node scripts/benchmark.mjs <repo>` measures its own baselines; add
+  `--expose-gc` if you are reporting heap, or the figure is whatever garbage the
+  run happened to leave behind.
+
+Notable changes go in [CHANGELOG.md](CHANGELOG.md). Security issues go through
+[private vulnerability reporting](SECURITY.md) rather than a public issue.
