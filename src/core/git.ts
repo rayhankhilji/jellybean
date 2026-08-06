@@ -50,12 +50,22 @@ export async function currentBranch(root: string): Promise<string | null> {
  * try the usual names and pick the first that exists, rather than assuming.
  */
 export async function defaultBase(root: string): Promise<string | null> {
-  for (const candidate of ['origin/main', 'origin/master', 'main', 'master', 'origin/develop', 'develop']) {
-    const result = await run(['git', 'rev-parse', '--verify', '--quiet', candidate], root, GIT_TIMEOUT_MS);
-    if (result.exitCode === 0) return candidate;
-  }
-  return null;
+  // One invocation listing every branch, rather than one `rev-parse` per
+  // candidate. Six process spawns to discover that a shallow clone has none of
+  // them was most of what jb_changes cost on a large repository.
+  const result = await run(
+    ['git', 'for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes'],
+    root,
+    GIT_TIMEOUT_MS,
+  );
+  if (result.exitCode !== 0) return null;
+
+  const present = new Set(result.output.split('\n').map((line) => line.trim()));
+  return BASE_CANDIDATES.find((candidate) => present.has(candidate)) ?? null;
 }
+
+/** Conventional base branch names, most specific first. */
+const BASE_CANDIDATES = ['origin/main', 'origin/master', 'main', 'master', 'origin/develop', 'develop'];
 
 /**
  * Files changed in the working tree, or between a base and HEAD.
@@ -70,13 +80,17 @@ export async function changedFiles(root: string, base: string | null): Promise<C
     ? ['git', 'diff', '--unified=0', '--no-color', '--find-renames', `${base}...HEAD`]
     : ['git', 'diff', '--unified=0', '--no-color', '--find-renames', 'HEAD'];
 
-  const diff = await run(diffArgs, root, GIT_TIMEOUT_MS);
+  // Untracked files have no diff at all, but they are unambiguously part of
+  // "what have I changed" and omitting them makes the answer wrong. The two
+  // invocations are independent, so they run together.
+  const [diff, status] = await Promise.all([
+    run(diffArgs, root, GIT_TIMEOUT_MS),
+    base ? null : run(['git', 'status', '--porcelain=v1', '--untracked-files=all'], root, GIT_TIMEOUT_MS),
+  ]);
+
   const files = parseDiff(diff.output);
 
-  // Untracked files have no diff at all, but they are unambiguously part of
-  // "what have I changed" and omitting them makes the answer wrong.
-  if (!base) {
-    const status = await run(['git', 'status', '--porcelain=v1', '--untracked-files=all'], root, GIT_TIMEOUT_MS);
+  if (status) {
     for (const line of status.output.split('\n')) {
       if (!line.startsWith('?? ')) continue;
       const path = line.slice(3).trim();

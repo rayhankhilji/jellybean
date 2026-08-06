@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseDiff } from '../src/core/git.js';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { changedFiles, defaultBase, isRepository, parseDiff } from '../src/core/git.js';
+import { run } from '../src/diagnostics/runner.js';
 
 test('a modified file yields its changed ranges and counts', () => {
   const diff = [
@@ -127,4 +131,93 @@ test('the parser is reentrant across calls', () => {
   assert.equal(parseDiff(added)[0]!.status, 'added');
   assert.equal(parseDiff(plain)[0]!.status, 'modified', 'state leaked from the previous parse');
   assert.equal(parseDiff(added)[0]!.status, 'added');
+});
+
+/**
+ * The rest of this file drives real `git` against real repositories.
+ *
+ * `defaultBase` guesses which branch you forked from, which is a convention
+ * rather than something git records, and it is now answered from one listing of
+ * every ref instead of one lookup per candidate. That rewrite is only correct if
+ * it still picks the same branch, including the precedence between candidates.
+ */
+
+async function inRepo(body: (root: string) => Promise<void>, setup: readonly string[][] = []): Promise<void> {
+  const root = await mkdtemp(join(tmpdir(), 'jellybean-git-'));
+  try {
+    await writeFile(join(root, 'a.txt'), 'one\n', 'utf8');
+    const commands = [
+      ['git', 'init', '--quiet'],
+      ['git', 'config', 'user.email', 'test@example.com'],
+      ['git', 'config', 'user.name', 'Test'],
+      ['git', 'config', 'commit.gpgsign', 'false'],
+      ['git', 'add', '.'],
+      ['git', 'commit', '--quiet', '-m', 'first'],
+      ...setup,
+    ];
+    for (const argv of commands) {
+      const result = await run(argv, root, 20_000);
+      assert.equal(result.exitCode, 0, `${argv.join(' ')} failed: ${result.output}`);
+    }
+    await body(root);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+test('defaultBase finds a conventional branch, and prefers the remote one', async () => {
+  await inRepo(
+    async (root) => {
+      assert.equal(await defaultBase(root), 'origin/main');
+    },
+    [
+      ['git', 'branch', '-m', 'main'],
+      ['git', 'branch', 'develop'],
+      // A remote-tracking ref, without a remote to fetch from.
+      ['git', 'update-ref', 'refs/remotes/origin/main', 'HEAD'],
+    ],
+  );
+});
+
+test('defaultBase falls back to a local branch when there is no remote', async () => {
+  await inRepo(
+    async (root) => {
+      assert.equal(await defaultBase(root), 'master');
+    },
+    [['git', 'branch', '-m', 'master']],
+  );
+});
+
+test('defaultBase returns null rather than guessing when nothing conventional exists', async () => {
+  await inRepo(
+    async (root) => {
+      assert.equal(await defaultBase(root), null);
+    },
+    [['git', 'branch', '-m', 'wip/experiment']],
+  );
+});
+
+test('changedFiles reports edits and untracked files together', async () => {
+  await inRepo(async (root) => {
+    await writeFile(join(root, 'a.txt'), 'one\ntwo\n', 'utf8');
+    await writeFile(join(root, 'b.txt'), 'new file\n', 'utf8');
+
+    const files = await changedFiles(root, null);
+    const byPath = new Map(files.map((f) => [f.path, f]));
+
+    assert.equal(byPath.get('a.txt')?.status, 'modified');
+    assert.equal(byPath.get('a.txt')?.added, 1);
+    // An untracked file has no diff at all; omitting it makes "what have I
+    // changed" wrong in the most common case of all, a brand new file.
+    assert.equal(byPath.get('b.txt')?.status, 'untracked');
+  });
+});
+
+test('isRepository is false outside a working tree', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'jellybean-nogit-'));
+  try {
+    assert.equal(await isRepository(root), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

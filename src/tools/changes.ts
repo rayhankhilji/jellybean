@@ -52,10 +52,17 @@ const MAX_IMPACT_PER_SYMBOL = 5;
 export async function runChanges(args: ChangesArgs, ctx: ToolContext): Promise<string> {
   const budget = resolveBudget(ctx, args.tokenBudget);
 
-  if (!(await isRepository(ctx.workspace.root))) {
+  // Every git invocation is a process spawn, and they dominate this tool. These
+  // three do not depend on each other, so they go out together.
+  const [repository, branch] = await Promise.all([
+    isRepository(ctx.workspace.root),
+    currentBranch(ctx.workspace.root),
+    ctx.index.ensureFresh(),
+  ]);
+
+  if (!repository) {
     return 'jb_changes — not a git repository, so there is nothing to compare against.';
   }
-  await ctx.index.ensureFresh();
 
   const scope = args.scope ?? 'working';
   let base: string | null = null;
@@ -73,7 +80,6 @@ export async function runChanges(args: ChangesArgs, ctx: ToolContext): Promise<s
   );
 
   const writer = new BudgetWriter(budget, FOOTER_RESERVE);
-  const branch = await currentBranch(ctx.workspace.root);
   const totalAdded = changed.reduce((sum, f) => sum + f.added, 0);
   const totalRemoved = changed.reduce((sum, f) => sum + f.removed, 0);
 
