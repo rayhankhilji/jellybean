@@ -131,6 +131,12 @@ thing you could not previously buy at any price.
   to ask of a machine that is also running an editor and a language server, and
   the honest recommendation at that size is to point the root at the subtree you
   are actually working in. express and nest retain 10MB and 37MB.
+
+  The wait is at least visible rather than silent: the server connects before it
+  starts indexing, so the handshake completes in about half a second and all nine
+  tools are listed immediately. A call arriving while the first scan is still
+  running gets told so, with a file count, instead of blocking until the client's
+  request timeout fires and leaves the agent holding a transport error.
 * **The estimator is ours.** Token counts come from Jelly Bean's own estimator
   (`src/core/tokens.ts`), which deliberately over-estimates slightly. Absolute
   figures will differ a few percent from a real BPE tokenizer; the ratios will

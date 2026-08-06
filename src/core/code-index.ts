@@ -88,6 +88,8 @@ export class CodeIndex {
 
   private lastScan = 0;
   private hasScanned = false;
+  /** Files the in-flight walk found, so progress can be reported against it. */
+  private scanTotal: number | null = null;
   private scanning: Promise<void> | null = null;
   private readonly cache: ParseCache;
   private readonly watcher: WorkspaceWatcher;
@@ -109,6 +111,22 @@ export class CodeIndex {
   /** Number of indexed files. */
   get fileCount(): number {
     return this.files.size;
+  }
+
+  /**
+   * Whether the first scan has finished.
+   *
+   * Tools are *correct* before it does — they answer from whatever is indexed —
+   * but the answers are incomplete, and on a large repository they are
+   * incomplete for long enough that saying so is better than appearing to hang.
+   */
+  get ready(): boolean {
+    return this.lastScan !== 0;
+  }
+
+  /** How far the current scan has got. `total` is unknown until the walk finishes. */
+  progress(): { done: number; total: number | null } {
+    return { done: this.files.size, total: this.scanTotal };
   }
 
   /** All records, in stable path order. */
@@ -222,6 +240,7 @@ export class CodeIndex {
       }
     } else {
       const found = await this.workspace.walk(this.config.maxFiles);
+      this.scanTotal = found.length;
       seen = new Set<string>();
       for (const entry of found) {
         seen.add(entry.path);

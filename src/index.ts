@@ -73,27 +73,46 @@ async function main(): Promise<void> {
 
   const { server, context } = createServer(config);
 
-  // Warm the index before accepting traffic, so the first tool call is fast
-  // rather than paying for a full scan while the client waits.
-  await context.index.ensureFresh(true);
-
-  // Watch after the first scan, so tool calls do not re-walk the tree. Without
-  // this every call that lands outside the freshness window pays for a full
-  // walk — seconds, on a repository of any size.
-  const watching = context.index.startWatching();
-  process.stderr.write(
-    `${SERVER_NAME} ${SERVER_VERSION} — indexed ${context.index.fileCount} files in ${config.root}` +
-      `${watching ? '' : ' (filesystem watching unavailable; falling back to periodic rescans)'}\n`,
-  );
+  // Start indexing, but do not wait for it before connecting.
+  //
+  // On a large repository the first scan takes tens of seconds, and waiting for
+  // it here means the client sees nothing at all for that time — no handshake,
+  // no tool list, and on some clients a connection timeout and a server that
+  // appears simply broken. Connecting first costs nothing: every tool awaits
+  // `ensureFresh` anyway, so the first call joins the scan already in flight and
+  // the rest are answered instantly.
+  const indexed = context.index
+    .ensureFresh(true)
+    .then(() => {
+      // Watching starts only once the tree has been walked. Before that there is
+      // nothing for a change notification to be relative to, and every tool call
+      // would still pay for a full walk.
+      const watching = context.index.startWatching();
+      process.stderr.write(
+        `${SERVER_NAME} ${SERVER_VERSION} — indexed ${context.index.fileCount} files in ${config.root}` +
+          `${watching ? '' : ' (filesystem watching unavailable; falling back to periodic rescans)'}\n`,
+      );
+    })
+    .catch((error: unknown) => {
+      // A failed first scan must not become an unhandled rejection that takes
+      // the process down. Tools will report an empty index, which is wrong but
+      // recoverable; a dead server is neither.
+      process.stderr.write(`${SERVER_NAME}: initial index failed: ${describe(error)}\n`);
+    });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  process.stderr.write(`${SERVER_NAME} ${SERVER_VERSION} — connected, indexing ${config.root}\n`);
 
   let closing = false;
   const shutdown = (): void => {
     if (closing) return; // a second Ctrl-C should not race the first
     closing = true;
     void (async () => {
+      // Let a first scan finish rather than killing it midway: it holds the
+      // parse cache for the whole repository, and abandoning it means the next
+      // start does all of that work again.
+      await indexed;
       await context.index.close();
       await server.close().catch(() => undefined);
       process.exit(0);
@@ -103,7 +122,11 @@ async function main(): Promise<void> {
   process.on('SIGTERM', shutdown);
 }
 
+function describe(error: unknown): string {
+  return error instanceof Error ? (error.stack ?? error.message) : String(error);
+}
+
 main().catch((error: unknown) => {
-  process.stderr.write(`${SERVER_NAME}: fatal: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+  process.stderr.write(`${SERVER_NAME}: fatal: ${describe(error)}\n`);
   process.exit(1);
 });
