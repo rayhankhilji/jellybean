@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { MAX_TOKEN_BUDGET, parseArgs } from '../src/config.js';
 import { BudgetWriter, clampTokens, estimateTokens } from '../src/core/tokens.js';
-import { IgnoreMatcher, compileRule } from '../src/core/ignore.js';
+import { DEFAULT_IGNORES, IgnoreMatcher, compileRule, type IgnoreRule } from '../src/core/ignore.js';
 import { HandleStore, handleId, isHandle } from '../src/core/handles.js';
 import { splitCommand } from '../src/diagnostics/runner.js';
 import { splitIdentifier, tokenizeCode } from '../src/util/text.js';
@@ -138,6 +138,116 @@ test('ignored files inside an ignored directory are also ignored', () => {
   const matcher = new IgnoreMatcher();
   matcher.addGitignore('dist/');
   assert.equal(matcher.ignores('dist/index.js', false), true);
+});
+
+/**
+ * The matcher answers most queries from combined regexes rather than by walking
+ * its rules, and those regexes are built by rewriting patterns — hoisting shared
+ * prefixes, moving a nested rule's anchor onto its base. Every one of those
+ * rewrites is a chance to change the language being matched.
+ *
+ * So rather than assert on hand-picked cases, this compares the real matcher
+ * against the definition it is optimising: rule by rule, last match wins. The
+ * corpus is deliberately awkward — anchored and unanchored, directory-only,
+ * globstars, nested bases, and negations, which are what disable the fast path
+ * and send everything down the general algorithm.
+ */
+test('the combined-regex fast paths agree with rule-by-rule evaluation', () => {
+  const patterns: Array<[pattern: string, base: string]> = [
+    ...DEFAULT_IGNORES.map((p): [string, string] => [p, '']),
+    ['.cache', ''],
+    ['/out*/', ''],
+    ['extensions/**/dist/', ''],
+    ['.vscode/extensions/**/out/', ''],
+    ['build/node_modules', ''],
+    ['test/fixtures/*', ''],
+    ['docs/**/*.tmp', ''],
+    ['*.local.md', ''],
+    ['secret.txt', 'packages/app'],
+    ['/generated/', 'packages/app'],
+    ['*.snap', 'packages/lib/test'],
+    ['out', 'packages/lib'],
+  ];
+
+  const negations: Array<[string, string]> = [
+    ['!test/fixtures/baseline/', ''],
+    ['!keep.png', ''],
+    ['!/generated/keep.ts', 'packages/app'],
+  ];
+
+  const paths: Array<[string, boolean]> = [
+    ['src/index.ts', false],
+    ['src/deep/nested/module/thing.ts', false],
+    ['node_modules', true],
+    ['node_modules/pkg/index.js', false],
+    ['a/b/node_modules/pkg/index.js', false],
+    ['out', true],
+    ['out2', true],
+    ['outfile.ts', false],
+    ['extensions/foo/dist', true],
+    ['extensions/foo/bar/dist/index.js', false],
+    ['.vscode/extensions/x/out', true],
+    ['build/node_modules', true],
+    ['build/node_modules/a.js', false],
+    ['test/fixtures/a.json', false],
+    ['test/fixtures/baseline', true],
+    ['test/fixtures/baseline/a.png', false],
+    ['docs/a.tmp', false],
+    ['docs/a/b/c.tmp', false],
+    ['other/a.tmp', false],
+    ['keep.png', false],
+    ['assets/logo.png', false],
+    ['notes.local.md', false],
+    ['packages/app/secret.txt', false],
+    ['packages/other/secret.txt', false],
+    ['packages/app/generated', true],
+    ['packages/app/generated/x.ts', false],
+    ['packages/app/generated/keep.ts', false],
+    ['packages/lib/test/a.snap', false],
+    ['packages/lib/out', true],
+    ['packages/lib/out/a.js', false],
+    ['packages/libout', true],
+    ['.cache', true],
+    ['deep/.cache/thing', false],
+  ];
+
+  /** The definition being optimised: every rule, in order, last match wins. */
+  const reference = (rules: readonly IgnoreRule[], relPath: string, isDir: boolean): boolean => {
+    let ignored = false;
+    for (const rule of rules) {
+      let candidate = relPath;
+      if (rule.base !== '') {
+        if (!relPath.startsWith(`${rule.base}/`)) continue;
+        candidate = relPath.slice(rule.base.length + 1);
+      }
+      const matched =
+        rule.reUnder.test(candidate) || ((!rule.directoryOnly || isDir) && rule.reSelf.test(candidate));
+      if (matched) ignored = !rule.negated;
+    }
+    return ignored;
+  };
+
+  // Without negations the bucketed fast path runs; with them, the pre-filter
+  // that decides whether the general loop is needed at all. Both must agree.
+  for (const withNegations of [false, true]) {
+    const all = withNegations ? [...patterns, ...negations] : patterns;
+
+    const matcher = new IgnoreMatcher();
+    const rules: IgnoreRule[] = [];
+    for (const [pattern, base] of all) {
+      matcher.addGitignore(pattern, base);
+      const rule = compileRule(pattern, base);
+      if (rule) rules.push(rule);
+    }
+
+    for (const [path, isDir] of paths) {
+      assert.equal(
+        matcher.ignores(path, isDir),
+        reference(rules, path, isDir),
+        `disagreed on ${path}${isDir ? '/' : ''} (negations: ${withNegations})`,
+      );
+    }
+  }
 });
 
 // --- handles ----------------------------------------------------------------

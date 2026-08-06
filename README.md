@@ -161,6 +161,37 @@ node dist/index.js /path/to/your/repo
 Not yet on the npm registry, so the commands above install straight from this
 repository — `npx` runs the build itself via the `prepare` script.
 
+### Check the setup
+
+```bash
+jellybean --doctor /path/to/your/repo
+```
+
+Almost everything that goes wrong is invisible from inside an agent
+conversation, so this prints what the server would actually see:
+
+```
+jellybean 1.0.0 — checking /Users/you/work/api
+
+    ok  node            v22.11.0 on darwin
+    ok  workspace       /Users/you/work/api
+    ok  index           2125 files indexed in 2707 ms
+    ok  file watching   active — the index updates as you edit
+    ok  git             repository found — jb_changes will work
+    ok  parse cache     3.1 MB at /Users/you/.cache/jellybean/63ceb474088a59d5.json
+    ok  notes           /Users/you/work/api/.jellybean/notes.json
+    ok  jb_diagnose     4 checks: typecheck, test, lint, build
+    ok  command policy  declared checks only
+
+Everything checks out.
+```
+
+It exits non-zero only for things that stop the server working — a missing root,
+an unreadable one, or a workspace where nothing at all is indexable. A warning
+means degraded, not broken: no git repository, a platform that cannot watch the
+filesystem, or a repository large enough that `--max-files` truncated it. It
+changes nothing while it runs.
+
 ## See it before you install it
 
 An MCP server is awkward to evaluate: normally the only way to find out what it
@@ -520,6 +551,7 @@ jellybean [path] [options]
       --allow-command <c>   Permit jb_diagnose to run this command. Repeatable.
       --unsafe-commands     Permit jb_diagnose to run any command. Off by default.
       --command-timeout <s> Seconds before a check is killed (default 120).
+      --doctor              Check the setup and exit, without starting the server.
   -h, --help                Show usage.
   -v, --version             Print the version.
 ```
@@ -603,7 +635,7 @@ name index.
 ```bash
 npm install
 npm run build       # compile to dist/
-npm test            # 144 tests
+npm test            # 172 tests
 npm run typecheck   # no emit
 npm run demo        # guided tour of every tool
 npm run render      # regenerate the README's SVG renders from live output
@@ -648,6 +680,15 @@ Issues and pull requests are welcome. Adding a language usually means one entry
 in `lang/registry.ts`, a pattern list in `lang/patterns.ts`, and a test in
 `test/outline.test.ts` — the three strategies in `lang/outline.ts` rarely need
 touching.
+
+One rule worth knowing before you start: **if you change how anything is parsed,
+bump `CACHE_VERSION` in `src/core/cache.ts`.** The cache is keyed by
+(path, size, mtime) and cannot notice that our own code changed, so without a
+bump you will test your fix against the old answer and conclude it did not work.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) has the rest. [CHANGELOG.md](CHANGELOG.md)
+records what changed between releases, and [SECURITY.md](SECURITY.md) covers the
+threat model and how to report a vulnerability.
 
 ## License
 

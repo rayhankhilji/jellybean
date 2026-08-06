@@ -15,6 +15,13 @@ export interface IgnoreRule {
   directoryOnly: boolean;
   /** Directory the rule was declared in, relative to the root ('' for root). */
   base: string;
+  /**
+   * The pattern body as a regex source, without anchors or the "at any depth"
+   * prefix. Kept so alternations can be built without unpicking `reSelf.source`.
+   */
+  core: string;
+  /** Whether the pattern is fixed to its base directory rather than matching at any depth. */
+  anchored: boolean;
 }
 
 /** Directories that are never worth indexing, regardless of .gitignore. */
@@ -103,16 +110,21 @@ export function compileRule(pattern: string, base = ''): IgnoreRule | null {
   // Two regexes rather than one, because git treats "this path" and "everything
   // under this path" differently: `dist/` names a directory, but every file
   // inside it is ignored too — even though those files are not directories.
-  const prefix = anchored ? '' : '(?:.*/)?';
-  const core = `${prefix}${globToRegExp(body)}`;
+  const core = globToRegExp(body);
+  const prefix = anchored ? '' : ANY_DEPTH;
   return {
-    reSelf: new RegExp(`^${core}$`),
-    reUnder: new RegExp(`^${core}/`),
+    reSelf: new RegExp(`^${prefix}${core}$`),
+    reUnder: new RegExp(`^${prefix}${core}/`),
     negated,
     directoryOnly,
     base,
+    core,
+    anchored,
   };
 }
+
+/** "At any depth" — the prefix an unanchored gitignore pattern implies. */
+const ANY_DEPTH = '(?:.*/)?';
 
 /** Translate a gitignore glob into a regular expression body. */
 function globToRegExp(glob: string): string {
@@ -230,6 +242,33 @@ export class IgnoreMatcher {
 
   private combinedCache: { any: RegExp; directoryOnly: RegExp; at: number } | null = null;
   private scopedCache: { rules: IgnoreRule[]; at: number } | null = null;
+  private anyCache: { re: RegExp; at: number } | null = null;
+
+  /**
+   * One alternation over every rule, negations and nested files included, used
+   * only to answer "could anything here match at all?".
+   *
+   * Last-match-wins is inherently ordered, so the general algorithm cannot be
+   * replaced by an alternation — but it can be skipped. Nearly every path in a
+   * repository matches no rule whatsoever, and for those this single test stands
+   * in for the entire loop.
+   *
+   * It is allowed to be over-inclusive (a directory-only rule is included even
+   * when testing a file) because a hit only means "evaluate properly", never
+   * "ignored".
+   */
+  private anyRule(): RegExp {
+    if (this.anyCache && this.anyCache.at === this.rules.length) return this.anyCache.re;
+
+    const parts: Alternative[] = [];
+    for (const rule of this.rules) {
+      parts.push({ rule, suffix: '/' }, { rule, suffix: '$' });
+    }
+
+    const built = { re: alternation(parts), at: this.rules.length };
+    this.anyCache = built;
+    return built.re;
+  }
 
   /**
    * Root-scoped rules as two alternations: those that apply to any entry, and
@@ -238,12 +277,12 @@ export class IgnoreMatcher {
   private combined(): { any: RegExp; directoryOnly: RegExp } {
     if (this.combinedCache && this.combinedCache.at === this.rules.length) return this.combinedCache;
 
-    const any: string[] = [];
-    const directoryOnly: string[] = [];
+    const any: Alternative[] = [];
+    const directoryOnly: Alternative[] = [];
     for (const rule of this.rules) {
       if (rule.negated || rule.base !== '') continue;
-      any.push(source(rule.reUnder));
-      (rule.directoryOnly ? directoryOnly : any).push(source(rule.reSelf));
+      any.push({ rule, suffix: '/' });
+      (rule.directoryOnly ? directoryOnly : any).push({ rule, suffix: '$' });
     }
 
     const built = {
@@ -299,6 +338,12 @@ export class IgnoreMatcher {
       return this.scopedRules().some((rule) => this.matches(rule, relPath, isDir));
     }
 
+    // Negations make order significant, so every rule has to be consulted in
+    // sequence. But only for paths some rule actually touches: two `!` lines in
+    // vscode's root .gitignore were enough to send all 16,000 of its files
+    // through ~500 regexes apiece, which cost more than parsing them did.
+    if (!this.anyRule().test(relPath)) return false;
+
     let ignored = false;
     for (const rule of this.rules) {
       let candidate = relPath;
@@ -316,13 +361,52 @@ export class IgnoreMatcher {
   }
 }
 
-/** The body of a regex, without its anchors, for use inside an alternation. */
-function source(re: RegExp): string {
-  return re.source;
+/** One rule's contribution to a combined regex. */
+interface Alternative {
+  rule: IgnoreRule;
+  /** `'$'` for "this exact path", `'/'` for "anything beneath it". */
+  suffix: '$' | '/';
 }
 
-/** Combine alternatives into one regex. Never matches when there are none. */
-function alternation(parts: readonly string[]): RegExp {
-  if (parts.length === 0) return /(?!)/;
-  return new RegExp(parts.map((part) => `(?:${part})`).join('|'));
+/**
+ * Combine rule patterns into one regex, hoisting the shared "at any depth"
+ * prefix out of the unanchored ones.
+ *
+ * This is the whole performance story of the matcher. Written the obvious way —
+ * one alternative per rule, each carrying its own copy of ANY_DEPTH — a path
+ * that matches nothing makes the engine re-scan it once per alternative, and
+ * every one of those scans backtracks. On vscode's rule set that was 165µs for
+ * a single `ignores` call, and there are twenty thousand of them in a walk.
+ *
+ * Hoisting the prefix gives the identical language for a completely different
+ * cost: the engine walks the path once and then tries a plain alternation of
+ * short bodies at each position.
+ *
+ * A rule from a nested .gitignore is written relative to its own directory, so
+ * its anchor moves rather than relaxes: `out/` declared in `build/` becomes
+ * `^build/out`. Relaxing it to match at any depth would also match `other/out`.
+ */
+function alternation(alternatives: readonly Alternative[]): RegExp {
+  // Everything sharing a base directory, an anchoring, and a suffix also shares
+  // a prefix, so one group emits one alternative however many rules are in it.
+  // A repository with fifty nested .gitignore files collapses to a handful.
+  const groups = new Map<string, { prefix: string; suffix: string; bodies: string[] }>();
+
+  for (const { rule, suffix } of alternatives) {
+    const base = rule.base === '' ? '' : `${escapeLiteral(rule.base)}/`;
+    const prefix = `^${base}${rule.anchored ? '' : ANY_DEPTH}`;
+    const key = `${prefix} ${suffix}`;
+
+    const group = groups.get(key);
+    if (group) group.bodies.push(rule.core);
+    else groups.set(key, { prefix, suffix, bodies: [rule.core] });
+  }
+
+  if (groups.size === 0) return /(?!)/;
+  const parts = [...groups.values()].map(({ prefix, suffix, bodies }) => `(?:${prefix}(?:${bodies.join('|')})${suffix})`);
+  return new RegExp(parts.join('|'));
+}
+
+function escapeLiteral(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
