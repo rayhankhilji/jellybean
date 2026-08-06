@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="794" height="412" viewBox="0 0 794 412" role="img" aria-label="jb_map — orient in a repository">
-<rect width="794" height="412" rx="10" fill="#12151d" stroke="#2b3040"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="794" height="431" viewBox="0 0 794 431" role="img" aria-label="jb_map — orient in a repository">
+<rect width="794" height="431" rx="10" fill="#12151d" stroke="#2b3040"/>
 <path d="M0 10a10 10 0 0 1 10-10h774a10 10 0 0 1 10 10v24H0z" fill="#1b1f2a"/>
 <line x1="0" y1="34" x2="794" y2="34" stroke="#2b3040"/>
 <circle cx="18" cy="17" r="5.5" fill="#ff5f57"/>
@@ -7,18 +7,19 @@
 <circle cx="52" cy="17" r="5.5" fill="#28c840"/>
 <text x="397" y="21" text-anchor="middle" fill="#8b93a7" font-family="ui-sans-serif,-apple-system,Segoe UI,sans-serif" font-size="12">jb_map — orient in a repository</text>
 <text x="18" y="64" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#28c840">› </tspan><tspan fill="#d6dae4" font-weight="bold">jb_map {depth:&quot;tree&quot;}</tspan></text>
-<text x="18" y="102" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#7fd1b9" font-weight="bold">jb_map —</tspan><tspan fill="#d6dae4"> jellybean-mcp  54 files  11k lines  typescript×42 javascript×4 json×3 text×2 markdown×2 yaml×1</tspan></text>
-<text x="18" y="140" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">./  7 files  863L  json×3 text×2 markdown×2</tspan></text>
-<text x="18" y="159" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  .github/</tspan></text>
-<text x="18" y="178" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    workflows/  1 file  46L  yaml×1</tspan></text>
-<text x="18" y="197" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  scripts/  4 files  692L  javascript×4</tspan></text>
-<text x="18" y="216" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  src/  3 files  543L  typescript×3</tspan></text>
-<text x="18" y="235" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    core/  12 files  2.3kL  typescript×12</tspan></text>
-<text x="18" y="254" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    diagnostics/  2 files  722L  typescript×2</tspan></text>
-<text x="18" y="273" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    lang/  6 files  1.5kL  typescript×6</tspan></text>
-<text x="18" y="292" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    tools/  10 files  2.2kL  typescript×10</tspan></text>
-<text x="18" y="311" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    util/  1 file  168L  typescript×1</tspan></text>
-<text x="18" y="330" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  test/  8 files  2.0kL  typescript×8</tspan></text>
-<text x="18" y="368" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#6c7488">[143/800 tok]</tspan></text>
-<text x="18" y="387" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#7fd1b9" font-weight="bold">next:</tspan><tspan fill="#d6dae4"> jb_map {path:&quot;&lt;dir&gt;&quot;, depth:&quot;symbols&quot;} to see what a directory contains</tspan></text>
+<text x="18" y="102" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#7fd1b9" font-weight="bold">jb_map —</tspan><tspan fill="#d6dae4"> jellybean-mcp  66 files  13k lines  typescript×46 yaml×5 markdown×5 javascript×5 json×3 text×2</tspan></text>
+<text x="18" y="140" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">./  9 files  1.1kL  markdown×4 json×3 text×2</tspan></text>
+<text x="18" y="159" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  .github/  1 file  29L  markdown×1</tspan></text>
+<text x="18" y="178" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    ISSUE_TEMPLATE/  4 files  170L  yaml×4</tspan></text>
+<text x="18" y="197" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    workflows/  1 file  73L  yaml×1</tspan></text>
+<text x="18" y="216" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  scripts/  5 files  708L  javascript×5</tspan></text>
+<text x="18" y="235" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  src/  5 files  921L  typescript×5</tspan></text>
+<text x="18" y="254" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    core/  12 files  2.8kL  typescript×12</tspan></text>
+<text x="18" y="273" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    diagnostics/  2 files  722L  typescript×2</tspan></text>
+<text x="18" y="292" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    lang/  6 files  1.5kL  typescript×6</tspan></text>
+<text x="18" y="311" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    tools/  10 files  2.3kL  typescript×10</tspan></text>
+<text x="18" y="330" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">    util/  1 file  168L  typescript×1</tspan></text>
+<text x="18" y="349" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#d6dae4">  test/  10 files  2.7kL  typescript×10</tspan></text>
+<text x="18" y="387" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#6c7488">[161/800 tok]</tspan></text>
+<text x="18" y="406" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" xml:space="preserve"><tspan fill="#7fd1b9" font-weight="bold">next:</tspan><tspan fill="#d6dae4"> jb_map {path:&quot;&lt;dir&gt;&quot;, depth:&quot;symbols&quot;} to see what a directory contains</tspan></text>
 </svg>

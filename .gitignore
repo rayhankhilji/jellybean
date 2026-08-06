@@ -6,6 +6,9 @@ dist/
 dist-test/
 *.tsbuildinfo
 
+# What `npm pack` leaves behind
+*.tgz
+
 # Jelly Bean's own notes store, when running the server on this repo
 .jellybean/
 

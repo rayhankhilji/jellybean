@@ -82,9 +82,20 @@ with the filesystem watcher running.
 
 | Repository | Files | Cold index | Warm start | `jb_map` | `jb_outline` | `jb_search` | `jb_trace` |
 |---|---|---|---|---|---|---|---|
-| expressjs/express | 213 | 965ms | 100ms | 21ms | 2ms | 42ms | 4ms |
-| nestjs/nest | 2,124 | 5.3s | 997ms | 22ms | 1ms | 21ms | 3ms |
-| microsoft/vscode | 16,000 | 97s | 13.4s | 116ms | 1ms | 24ms | 4ms |
+| expressjs/express | 213 | 475ms | 42ms | 8ms | 1ms | 15ms | 5ms |
+| nestjs/nest | 2,125 | 2.3s | 509ms | 22ms | 2ms | 12ms | 10ms |
+| microsoft/vscode | 16,494 | 66s | 8.5s | 77ms | 10ms | 27ms | 5ms |
+
+The number that decides how a session *feels* is none of those, though — it is
+what an editor save costs, because that is what happens between one tool call
+and the next. The watcher reports which paths changed, so a rescan stats those
+rather than walking the tree, and only the edited files' graph edges are
+recomputed:
+
+| Repository | One file saved → index up to date |
+|---|---|
+| expressjs/express | 2–5ms |
+| nestjs/nest | 7–16ms |
 
 #### Token cost
 
@@ -98,12 +109,12 @@ measured, not assumed.
 | | Rank what matters | 236,235 | 1,864 — `jb_map` files | **99%** |
 | | What is in `lib/utils.js`? | 1,776 — read it | 222 — `jb_outline` | **88%** |
 | | Where is `contentType`? | 110,340 — grep → read 20 files | 1,992 — `jb_search` | **98%** |
-| nest | Orient in the repo | 1,281,435 — read all 2,124 files | 1,875 — `jb_map` tree | **99.9%** |
+| nest | Orient in the repo | 1,284,820 — read all 2,125 files | 1,878 — `jb_map` tree | **99.9%** |
 | | What is in `core/injector/container.ts`? | 3,350 — read it | 1,213 — `jb_outline` | **64%** |
 | | Where is `ModuleMetatype`? | 56,224 — grep → read 20 files | 1,680 — `jb_search` | **97%** |
-| vscode | Orient in the repo | 66,199,497 — read all 16,000 files | 1,880 — `jb_map` tree | **99.9%** |
+| vscode | Orient in the repo | 68,484,766 — read all 16,494 files | 1,884 — `jb_map` tree | **99.9%** |
 | | What is in `base/common/lifecycle.ts`? | 8,411 — read it | 1,899 — `jb_outline` | **77%** |
-| | Where is `TRACK_DISPOSABLES`? | 110,271 — grep → read 20 files | 1,881 — `jb_search` | **98%** |
+| | Where is `TRACK_DISPOSABLES`? | 140,840 — grep → read 20 files | 1,859 — `jb_search` | **99%** |
 
 The orientation rows look almost too good, so it is worth being precise about
 what they mean: nobody reads 66 million tokens, because nobody can. That is the
@@ -113,15 +124,25 @@ thing you could not previously buy at any price.
 
 #### Honest limits
 
-* **vscode is at the edge.** 16,000 files costs 97 seconds to index cold and
-  ~580MB of heap. Warm start is 13s. Everything after that is fast, but a
-  monorepo of that size is not this design's happy path.
+* **vscode is at the edge, and memory is why.** 16,494 files costs 66 seconds to
+  index cold — call it 60–80s, it varies with what else the machine is doing —
+  8.5 seconds to start warm, and **914MB of retained heap**. Every tool call
+  after that is fast, and a session pays the cold cost once. But 914MB is a lot
+  to ask of a machine that is also running an editor and a language server, and
+  the honest recommendation at that size is to point the root at the subtree you
+  are actually working in. express and nest retain 10MB and 37MB.
 * **The estimator is ours.** Token counts come from Jelly Bean's own estimator
   (`src/core/tokens.ts`), which deliberately over-estimates slightly. Absolute
   figures will differ a few percent from a real BPE tokenizer; the ratios will
   not.
 * **Search latency depends on the query.** A term appearing in thousands of
-  files costs more than a rare one, because more candidate files get read.
+  files costs more than a rare one, because more candidate files get read. Regex
+  mode has no ranking to narrow by at all: a pattern matching nothing in nest
+  reads all 2,125 files, which takes ~190ms and is the slowest thing here.
+* **Parsing is regex-driven, not a real parser per language.** That is why there
+  is no build step and no native dependency, and it is also where nearly all of
+  Jelly Bean's wrongness lives. Unusual formatting can produce a wrong extent or
+  a missed declaration. There is an issue template specifically for those.
 
 ## Install
 

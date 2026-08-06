@@ -56,6 +56,22 @@ function cachePath(root) {
   return join(base, 'jellybean', `${createHash('sha1').update(root).digest('hex').slice(0, 16)}.json`);
 }
 
+/**
+ * Heap actually retained by the index.
+ *
+ * Without collecting first this reports whatever garbage the run happened to
+ * leave behind, which on a large repository swings by a factor of three between
+ * runs — a number that unreliable is worse than none. Run with `--expose-gc` for
+ * the real figure; the label says which you got.
+ */
+function retainedHeapMb() {
+  if (typeof global.gc === 'function') {
+    global.gc();
+    return { mb: process.memoryUsage().heapUsed / 1048576, collected: true };
+  }
+  return { mb: process.memoryUsage().heapUsed / 1048576, collected: false };
+}
+
 function makeContext(root) {
   const { config } = parseArgs([root]);
   const workspace = new Workspace(config.root, config.ignore);
@@ -146,7 +162,7 @@ for (const target of targets) {
     fileCount,
     coldMs: cold.ms,
     warmMs: warm.ms,
-    heapMb: process.memoryUsage().heapUsed / 1048576,
+    heapMb: retainedHeapMb(),
     calls,
     subject: subject.path,
     subjectLines: subject.lineCount,
@@ -213,7 +229,10 @@ if (markdown) {
     process.stdout.write(`\n=== ${r.label} — ${r.fileCount.toLocaleString()} files ===\n`);
     process.stdout.write(`  cold index          ${ms(r.coldMs).padStart(9)}\n`);
     process.stdout.write(`  warm start          ${ms(r.warmMs).padStart(9)}   (parse cache present)\n`);
-    process.stdout.write(`  heap                ${r.heapMb.toFixed(0).padStart(6)} MB\n`);
+    process.stdout.write(
+      `  heap                ${r.heapMb.mb.toFixed(0).padStart(6)} MB` +
+        `${r.heapMb.collected ? '   (after gc)' : '   (uncollected — rerun with node --expose-gc for the retained figure)'}\n`,
+    );
     process.stdout.write('  --- tool latency ---\n');
     for (const [name, call] of Object.entries(r.calls)) {
       process.stdout.write(`  ${name.padEnd(18)}  ${ms(call.ms).padStart(9)}   ${estimateTokens(call.value)} tok\n`);
