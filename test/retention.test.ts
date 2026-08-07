@@ -65,12 +65,14 @@ test('an extracted string does not keep its source alive', { skip: typeof global
   const sliced = measure((source) => source.slice(6, 40));
   const detached = measure((source) => detachString(source.slice(6, 40)));
 
-  // Half the raw source volume is a generous margin; in practice the difference
-  // is the whole of it against essentially nothing.
-  const sourceBytes = SOURCES * SIZE * 2;
-  assert.ok(sliced > sourceBytes / 2, `expected plain slices to retain their sources, saw ${sliced} bytes`);
+  // Compared against each other, not against a computed byte figure. How many
+  // bytes a string costs is V8's business — one per character here, two if any
+  // of it were outside Latin-1 — and the exact accounting differs between
+  // platforms and Node versions. The ratio does not: one strategy retains every
+  // source, the other retains none of them.
+  assert.ok(sliced > (SOURCES * SIZE) / 4, `expected plain slices to retain their sources, saw ${sliced} bytes`);
   assert.ok(
-    detached < sourceBytes / 10,
+    detached < sliced / 10,
     `detachString retained ${detached} bytes, against ${sliced} for plain slices`,
   );
 });
@@ -123,12 +125,13 @@ test('the index does not retain the text it was built from', { skip: typeof glob
 
     const grew = collect() - baseline;
 
-    // Source held in memory costs two bytes per ASCII character, so retaining
-    // every file would show up as at least this much. A tenth of it is a
-    // generous ceiling for a description of sixty small classes.
-    const ifRetained = FILES * PADDING * 2;
+    // ASCII source costs about a byte a character in V8, so holding every file
+    // would show up as roughly this. A fifth of it is a generous ceiling for a
+    // description of sixty small classes, and leaves room for the accounting to
+    // differ between platforms.
+    const ifRetained = FILES * PADDING;
     assert.ok(
-      grew < ifRetained / 10,
+      grew < ifRetained / 5,
       `indexing grew the heap by ${(grew / 1e6).toFixed(1)}MB; holding every source file would cost ` +
         `about ${(ifRetained / 1e6).toFixed(0)}MB, so extracted strings are pointing back at their files`,
     );
