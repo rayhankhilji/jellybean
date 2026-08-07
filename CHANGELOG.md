@@ -45,16 +45,23 @@ these):
 
 | | express (213 files) | nest (2,125 files) |
 |---|---|---|
-| cold index | 336 ms | 2,707 ms |
-| warm start (parse cache present) | 42 ms | 858 ms |
-| tool latency | 0–11 ms | 1–15 ms |
-| one-file edit → index updated | 2–5 ms | 6–12 ms |
+| cold index | 475 ms | 2.3 s |
+| warm start (parse cache present) | 42 ms | 509 ms |
+| tool latency | 1–15 ms | 2–22 ms |
+| one file saved → index up to date | 2–5 ms | 7–16 ms |
+| retained heap | 7 MB | 18 MB |
 | regex search matching nothing | — | 191 ms |
 | tokens to orient in the repository | 236,235 → 749 | 1,284,820 → 1,878 |
 
 The parse cache means a restart does not re-parse the repository. Filesystem
 watching means an idle tool call costs nothing, and an edit costs the file that
 changed rather than the tree it lives in.
+
+On a repository large enough for the first scan to take real time — vscode, at
+16,494 files — the server connects before indexing rather than after, so the
+handshake completes in about half a second and all nine tools are listed
+immediately. A call arriving while that scan is still running is told so, with a
+file count, rather than blocking until the client gives up.
 
 ### Security
 
