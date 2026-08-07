@@ -12,7 +12,7 @@
 
 import { z } from 'zod';
 import type { CodeSymbol } from '../lang/types.js';
-import { BudgetWriter, clampTokens } from '../core/tokens.js';
+import { BudgetWriter, clampTokens, estimateTokens } from '../core/tokens.js';
 import { fields, FOOTER_RESERVE, footer, header, indent, plural } from '../core/render.js';
 import { resolveBudget, tokenBudgetArg, type ToolContext } from './context.js';
 
@@ -94,6 +94,20 @@ export async function runOutline(args: OutlineArgs, ctx: ToolContext): Promise<s
       continue;
     }
 
+    // Pick a detail level that fits rather than writing rich rows until the
+    // budget runs out. Dropping a symbol hides its existence; dropping its
+    // signature only hides its shape, and an agent that knows a method exists
+    // can always ask for it. Detail is the cheaper thing to lose.
+    const detail = chooseDetail(visible, writer.remaining, showSignatures);
+
+    if (detail === 'packed') {
+      // No handles at this level: at ~6 tokens each they cost more than the
+      // names they point at, and a name is enough to ask a follow-up with.
+      writer.pushAll(packSymbols(visible));
+      if (writer.isFull) break;
+      continue;
+    }
+
     let exhausted = false;
     for (const symbol of visible) {
       // Properties are not worth a handle: reading one field in isolation tells
@@ -108,7 +122,7 @@ export async function runOutline(args: OutlineArgs, ctx: ToolContext): Promise<s
               kind: symbol.kind,
               label: symbol.name,
             });
-      if (!writer.push(renderSymbol(symbol, handle, showSignatures))) {
+      if (!writer.push(renderSymbol(symbol, handle, detail === 'full'))) {
         exhausted = true;
         break;
       }
@@ -120,6 +134,76 @@ export async function runOutline(args: OutlineArgs, ctx: ToolContext): Promise<s
     footer(writer, budget, 'jb_read {handle:"jb_…"} to read one symbol\'s body, or jb_trace to see its callers'),
   );
   return writer.toString();
+}
+
+/** How much is shown per symbol. Chosen to fit, in this order of preference. */
+type Detail = 'full' | 'named' | 'packed';
+
+/** A handle is about this many tokens; enough to matter when there are fifty. */
+const HANDLE_TOKENS = 6;
+
+/**
+ * The most detail that fits the remaining budget.
+ *
+ * Measured rather than guessed, because "will fifty rows fit" depends entirely
+ * on how long the signatures are, and a class of one-line getters is a very
+ * different proposition from a class of generic factory methods.
+ */
+function chooseDetail(symbols: readonly CodeSymbol[], remaining: number, showSignatures: boolean): Detail {
+  if (showSignatures && cost(symbols, 'full') <= remaining) return 'full';
+  if (cost(symbols, 'named') <= remaining) return 'named';
+  return 'packed';
+}
+
+function cost(symbols: readonly CodeSymbol[], detail: Exclude<Detail, 'packed'>): number {
+  let total = 0;
+  for (const symbol of symbols) {
+    const label = detail === 'full' ? clampTokens(symbol.signature, 40) : `${symbol.name} (${symbol.kind})`;
+    total += estimateTokens(label) + HANDLE_TOKENS + LINE_REF_TOKENS;
+  }
+  return total;
+}
+
+/** `:31-367` and the surrounding separators, roughly. */
+const LINE_REF_TOKENS = 5;
+
+/** Symbols per line when packed. Long enough to be dense, short enough to read. */
+const PACKED_PER_LINE = 6;
+
+/**
+ * Names only, grouped by kind, several to a line.
+ *
+ * The last resort before dropping symbols outright. It answers "what is in this
+ * file" completely, at roughly a fifth of the cost of the full rows, and leaves
+ * the agent able to name anything it wants to look at more closely.
+ */
+function packSymbols(symbols: readonly CodeSymbol[]): string[] {
+  // Deduplicated, because a name-only listing repeating `moduleRef` five times
+  // says nothing the first one did not. The full rows keep every occurrence,
+  // where the line numbers make them distinct.
+  const byKind = new Map<string, Set<string>>();
+  for (const symbol of symbols) {
+    const bucket = byKind.get(symbol.kind);
+    if (bucket) bucket.add(symbol.name);
+    else byKind.set(symbol.kind, new Set([symbol.name]));
+  }
+
+  const rows: string[] = [];
+  for (const [kind, unique] of byKind) {
+    const names = [...unique];
+    for (let i = 0; i < names.length; i += PACKED_PER_LINE) {
+      const chunk = names.slice(i, i + PACKED_PER_LINE).join(', ');
+      rows.push(indent(1, i === 0 ? `${plural(names.length, kind, pluralKind(kind))}: ${chunk}` : `  ${chunk}`));
+    }
+  }
+  return rows;
+}
+
+/** English plurals for the symbol kinds whose default `+s` is wrong. */
+function pluralKind(kind: string): string {
+  if (kind.endsWith('y')) return `${kind.slice(0, -1)}ies`; // property -> properties
+  if (kind.endsWith('s') || kind.endsWith('ch') || kind.endsWith('x')) return `${kind}es`;
+  return `${kind}s`;
 }
 
 function renderSymbol(symbol: CodeSymbol, handle: string | null, showSignatures: boolean): string {

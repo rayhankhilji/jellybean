@@ -207,6 +207,53 @@ test('jb_outline can hide non-exported symbols', async () => {
   });
 });
 
+test('jb_outline drops detail before it drops symbols', async () => {
+  await withWorkspace(async (ctx) => {
+    // A file with more declarations than a small budget can describe in full.
+    const methods = Array.from({ length: 40 }, (_, i) => [
+      `  async performOperationNumber${i}(identifier: string, options: Record<string, unknown>): Promise<string> {`,
+      `    return identifier;`,
+      '  }',
+    ].join('\n'));
+    await writeFile(
+      join(ctx.workspace.root, 'src/wide.ts'),
+      ['export class WideService {', ...methods, '}'].join('\n'),
+      'utf8',
+    );
+    await ctx.index.ensureFresh(true);
+
+    const generous = await runOutline({ path: 'src/wide.ts', tokenBudget: 4000 }, ctx);
+    const tight = await runOutline({ path: 'src/wide.ts', tokenBudget: 400 }, ctx);
+
+    // The generous answer shows signatures; the tight one has to give them up.
+    assert.ok(generous.includes('options: Record<string, unknown>'), 'a generous budget should show signatures');
+    assert.equal(tight.includes('options: Record<string, unknown>'), false, 'a tight budget still spent tokens on signatures');
+
+    // But every method must still be named. An agent that is not told a method
+    // exists cannot ask about it; one told only its name can.
+    for (const i of [0, 17, 39]) {
+      assert.ok(tight.includes(`performOperationNumber${i}`), `method ${i} vanished instead of losing its signature`);
+    }
+    assert.ok(estimateTokens(tight) <= 400, `tight answer was ${estimateTokens(tight)} tokens`);
+  });
+});
+
+test('jb_outline pluralises symbol kinds properly when packing', async () => {
+  await withWorkspace(async (ctx) => {
+    const fields = Array.from({ length: 30 }, (_, i) => `  private readonly fieldNumber${i}: string = "${i}";`);
+    await writeFile(
+      join(ctx.workspace.root, 'src/fields.ts'),
+      ['export class Fields {', ...fields, '}'].join('\n'),
+      'utf8',
+    );
+    await ctx.index.ensureFresh(true);
+
+    const packed = await runOutline({ path: 'src/fields.ts', tokenBudget: 300 }, ctx);
+    assert.ok(packed.includes('properties:'), `expected "properties:", got:\n${packed}`);
+    assert.equal(packed.includes('propertys'), false, 'naive pluralisation leaked into output');
+  });
+});
+
 test('jb_outline reports a missing path clearly', async () => {
   await withWorkspace(async (ctx) => {
     const output = await runOutline({ path: 'src/nope.ts' }, ctx);
