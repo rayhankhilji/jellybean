@@ -74,6 +74,10 @@ Benchmarked against three real repositories, on an M-series Mac. Reproduce with
 subject files from whatever repository you point it at, so the numbers are not
 cherry-picked.
 
+Indexing figures are **CPU time**, not wall clock. A laptop running an editor, a
+language server and a browser will not reproduce a wall-clock number, and CPU
+time is the part that is actually about this code.
+
 #### Latency
 
 Cold is the first index of a repository. Warm is a restart with the parse cache
@@ -82,9 +86,15 @@ with the filesystem watcher running.
 
 | Repository | Files | Cold index | Warm start | `jb_map` | `jb_outline` | `jb_search` | `jb_trace` |
 |---|---|---|---|---|---|---|---|
-| expressjs/express | 213 | 475ms | 42ms | 8ms | 1ms | 15ms | 5ms |
-| nestjs/nest | 2,125 | 2.3s | 509ms | 22ms | 2ms | 12ms | 10ms |
-| microsoft/vscode | 16,494 | 66s | 10s | 77ms | 10ms | 27ms | 5ms |
+| expressjs/express | 213 | 1.2s | 0.1s | 8ms | 1ms | 15ms | 5ms |
+| nestjs/nest | 2,127 | 4.4s | 0.8s | 22ms | 2ms | 12ms | 10ms |
+| microsoft/vscode | 16,575 | 56s | 11s | 77ms | 10ms | 27ms | 5ms |
+
+Cold indexing vscode has no single bottleneck left. Symbol extraction is 11.3s
+of it, masking 8.5s, reading 6.2s, term counting 4.3s, walking 4.2s, import
+extraction 2.4s, and the rest is bookkeeping. Masking used to be 33s on its own
+— over half the total — which is why it is now the second item rather than the
+first.
 
 The number that decides how a session *feels* is none of those, though — it is
 what an editor save costs, because that is what happens between one tool call
@@ -122,6 +132,75 @@ what they mean: nobody reads 66 million tokens, because nobody can. That is the
 point. Without a map an agent reads *some* arbitrary subset and hopes it picked
 the right one; the comparison is against knowing the whole shape, which is a
 thing you could not previously buy at any price.
+
+#### Against the alternatives
+
+Measured, not asserted. Five questions an agent genuinely asks about an
+unfamiliar codebase, put to three MCP servers over the real protocol against
+[nestjs/nest](https://github.com/nestjs/nest) (2,125 files). Each server was
+given its own best tool for the job — not a like-for-like call, but the call its
+own documentation would tell you to make.
+
+Two things about the method, because they decide whether any of this is worth
+reading:
+
+* **Tokens are counted with a real BPE tokenizer** (`cl100k`), not Jelly Bean's
+  own estimator. Grading your own homework is not a benchmark.
+* **"Correct" means an agent could act on the answer**, checked against ground
+  truth established separately with `grep`. A response that happens to contain
+  the right filename inside a dump of every file in the repository is scored
+  wrong, because it is.
+
+The contenders: [**Serena**](https://github.com/oraios/serena) (~24k stars, the
+most popular code-intelligence MCP, backed by real language servers) and
+[**@modelcontextprotocol/server-filesystem**](https://github.com/modelcontextprotocol/servers)
+(the official one, and what most agents actually have).
+
+| Question | Jelly Bean | Serena | filesystem MCP |
+|---|---|---|---|
+| Orient in the repository | **2,958** ✓ | *no tool for this* | 62,156 ✓ |
+| Where is `NestContainer` defined? | 83 ✓ | **47** ✓ | 455 ✓ |
+| What does `injector/container.ts` contain? | 1,309 ✓ | **249** ✓ | 2,434 ✓ |
+| What depends on `injector/container.ts`? | **1,516** ✓ | 4,557 ✓ | 91,339 ✗ |
+| Where is DI scope handled? | **2,108** ✓ | 3,594 ✓ | 1,668 ✗ |
+| **Total to answer all five** | **7,974** | 8,447 (four) | 158,052 |
+| **Answered correctly** | **5 / 5** | 4 / 4 attempted | 3 / 5 |
+| Tool schemas sent on every connection | 2,951 | 5,560 | 2,795 |
+
+And what it costs to get the first answer out, from a cold cache:
+
+| | Jelly Bean | Serena | filesystem MCP |
+|---|---|---|---|
+| Cold — nothing cached | **2.6s** | 53.0s | 4.4s |
+| Warm — second run | **1.8s** | 18.5s | 5.1s |
+
+**Where Jelly Bean wins.** Orientation, decisively — Serena has no
+directory-level tool in its agent context at all, and the filesystem server
+answers with 62k tokens of JSON. Dependency tracing, by 3x over Serena and 60x
+over reading files. And cold start, by 20x over Serena: an import graph and a
+symbol index are cheaper to build than a language server's project model.
+
+**Where Serena wins, and it genuinely does.** Its answers for single-symbol
+lookup and file structure are more compact than ours — 47 tokens against 83, and
+249 against 1,309. Serena returns names; Jelly Bean returns names *plus*
+signatures, line ranges and handles you can expand without another search. More
+information, more tokens. If you want the leanest possible "what is in this
+file", Serena's is leaner. (Asked for a 400-token budget, `jb_outline` returns
+all 54 symbols in 267 tokens — but 1,309 is what it gives you by default, and
+that is the number in the table.)
+
+Serena is also doing something Jelly Bean cannot: real language-server
+semantics, so it knows a *reference* from a *string that happens to match*. It
+can rename a symbol across a codebase safely. Jelly Bean cannot and does not
+claim to. The trade is 53 seconds of cold start and a language server per
+language.
+
+**Where the filesystem server wins.** Nothing here, but that is the wrong
+framing — it is not trying to do this. It reads and writes files correctly and
+cheaply, and the 158k tokens are what happens when you ask a file API structural
+questions. That is the baseline this whole project exists to improve on.
+
+Reproduce it yourself: `node scripts/compare.mjs <repo>`.
 
 #### Honest limits
 
